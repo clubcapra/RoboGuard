@@ -1,7 +1,7 @@
 #include <Arduino.h>
 
 #ifdef USE_MICRO_ROS
-#include "roboguard_microros.h"
+#include "roboguard_micro_ros.h"
 #endif
 
 void setup() {

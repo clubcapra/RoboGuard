@@ -1,5 +1,5 @@
-#ifndef ROBOGUARD_MICROROS_H
-#define ROBOGUARD_MICROROS_H
+#ifndef ROBOGUARD_MICRO_ROS_H
+#define ROBOGUARD_MICRO_ROS_H
 
 #include <Arduino.h>
 #include <micro_ros_platformio.h>
