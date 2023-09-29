@@ -33,10 +33,10 @@ int setup_micro_ros(){
     error += RCSOFTCHECK(rclc_support_init(&support, 0, NULL, &allocator));
 
     // create node
-    error += RCSOFTCHECK(rclc_node_init_default(&node, "micro_ros_platformio_node", "", &support));
+    error += RCSOFTCHECK(rclc_node_init_default(&node, "RoboGuard", "", &support));
 
     // create publisher
-    error += RCSOFTCHECK(rclc_publisher_init_default(&publisher,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),"micro_ros_platformio_node_publisher"));
+    error += RCSOFTCHECK(rclc_publisher_init_default(&publisher,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),"/RoboGuard/test_topic"));
 
     // create timer,
     const unsigned int timer_timeout = 1000;
