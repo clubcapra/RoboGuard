@@ -19,13 +19,14 @@ rcl_allocator_t allocator;
 rcl_node_t node;
 rcl_timer_t pub_timer;
 
+int count = 0;
+
 #define RCSOFTCHECK(fn) (fn != RCL_RET_OK)
 
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&thermistor_pub, &thermistor_msg, NULL));
-        thermistor_msg.data.data[0]++;
     }
 }
 
