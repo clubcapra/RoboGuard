@@ -6,12 +6,16 @@
 #include <rclc/executor.h>
 
 #include <std_msgs/msg/float32_multi_array.h>
+#include <sensor_msgs/msg/battery_state.h>
 
 #include "roboguard_micro_ros.h"
 #include "sensor_data.h"
 
-rcl_publisher_t thermistor_pub;
+#define BATTERY_CAPACITY 6.5 //in Ah
+
+rcl_publisher_t thermistor_pub, battery_pub;
 std_msgs__msg__Float32MultiArray thermistor_msg;
+sensor_msgs__msg__BatteryState battery_msg;
 
 rclc_executor_t executor;
 rclc_support_t support;
@@ -27,6 +31,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&thermistor_pub, &thermistor_msg, NULL));
+        RCSOFTCHECK(rcl_publish(&battery_pub, &battery_msg, NULL));
     }
 }
 
@@ -42,6 +47,18 @@ int setup_micro_ros(){
     Serial3.begin(115200);
     set_microros_serial_transports(Serial3);
 
+    //initialize messages
+    thermistor_msg.data.data = sensor_data.thermistors;
+    thermistor_msg.data.size = N_THERMISTORS;
+    thermistor_msg.data.capacity = 1;
+
+    battery_msg.capacity = BATTERY_CAPACITY;
+    battery_msg.charge = nan("1");
+    battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LIPO;
+    battery_msg.design_capacity = BATTERY_CAPACITY;
+    battery_msg.present = 1;
+    battery_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_HEALTH_GOOD;
+
     allocator = rcl_get_default_allocator();
 
     //create init_options
@@ -52,6 +69,8 @@ int setup_micro_ros(){
 
     // create publisher
     error += RCSOFTCHECK(rclc_publisher_init_default(&thermistor_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),"thermistors"));
+    error += RCSOFTCHECK(rclc_publisher_init_default(&battery_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),"battery"));
+
 
     // create timer,
     const unsigned int timer_timeout = 66;
@@ -62,10 +81,6 @@ int setup_micro_ros(){
     error += RCSOFTCHECK(rclc_executor_add_timer(&executor, &pub_timer));
 
     alive = !error;
-
-    thermistor_msg.data.data = sensor_data.thermistors;
-    thermistor_msg.data.size = N_THERMISTORS;
-    thermistor_msg.data.capacity = 1;
 
     return(alive);
 }
