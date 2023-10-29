@@ -105,7 +105,7 @@ int update_micro_ros(){
     if(!alive){
         alive = setup_micro_ros();
     }
-    else if(rmw_uros_ping_agent(10, 1) != RMW_RET_OK){
+    else if(rmw_uros_ping_agent(100, 3) != RMW_RET_OK){
         alive = 0;
         clean_micro_ros();
     }
