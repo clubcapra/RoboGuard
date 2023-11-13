@@ -21,14 +21,17 @@ uint16_t ADS7828::read(uint8_t channel)
 
 uint8_t ADS7828::send_command(uint8_t channel)
 {
-    uint8_t command = this->mode&1 << SD_OFFSET | this->ADC_PWR&1 << ADC_OFFSET | this->REFERENCE_PWR&1 << REFERENCE_OFFSET | channel_array[channel]&7 << CH_OFFSET;
+    if(this->mode == SINGLE_ENDED){
+        channel = channel_array[channel];
+    }
+    uint8_t command = (this->mode&1 << SD_OFFSET) | (this->ADC_PWR&1 << ADC_OFFSET) | (this->REFERENCE_PWR&1 << REFERENCE_OFFSET) | (channel&7 << CH_OFFSET);
     this->wire->beginTransmission(this->address);
     this->wire->write(command);
     return this->wire->endTransmission();
 }
 
 
-ADS7828::ADS7828(TwoWire *wire, uint8_t address = 72U, uint8_t mode = SINGLE_ENDED, uint8_t ADC_PWR = 1, uint8_t REFERENCE_PWR = 1)
+ADS7828::ADS7828(uint8_t address = 72U, TwoWire *wire = &Wire, uint8_t mode = SINGLE_ENDED, uint8_t ADC_PWR = 1, uint8_t REFERENCE_PWR = 1)
 {
     this->wire = wire;
     this->address = address;
