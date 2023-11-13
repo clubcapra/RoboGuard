@@ -8,6 +8,9 @@ typedef struct{
     float thermistors[N_THERMISTORS];
     float battery_cell_voltage[N_BATTERY_CELLS];
     float battery_temp;
+    uint8_t drive_state;
+    float ambiant_temp;
+    float humidity;
 }sensor_data_t;
 
 extern sensor_data_t sensor_data;

@@ -7,6 +7,7 @@
 #include "interfaces.h"
 #include "sensor_data.h"
 
+const int bat_therm_pin = PB0;
 const int cell_pins[N_BATTERY_CELLS] = {PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PC0, PC1, PC2, PC3};
 const uint8_t thermistor_map[N_THERMISTORS] = {3,2,1,0,7,6,5,4};
 TwoWire wire1(PB7,PB6);
@@ -30,6 +31,8 @@ void update_interfaces(){
         sensor_data.battery_cell_voltage[i] = battery_calc_cell_v(analogRead(cell_pins[i]), analogRead(cell_pins[i-1]));
     }
 
+    sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
+
     for(int i = 0; i < N_THERMISTORS; i++){
         sensor_data.thermistors[i] = thermistor_calc_temp(ext_adc.read(thermistor_map[i]));
     }
@@ -37,7 +40,11 @@ void update_interfaces(){
     if(wire1.getWriteError()){
         wire1.clearWriteError();
     }
-    sensor_data.thermistors[0]= bme.readTemperature();
+
+    bme.performReading();
+    sensor_data.ambiant_temp = bme.readTemperature();
+    sensor_data.humidity = bme.readHumidity();
+    
 }
 
 float thermistor_calc_temp(int adc_reading){
