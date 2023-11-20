@@ -1,7 +1,7 @@
 #include "ADS7828.h"
 #include "stdint.h"
 
-#define CH_OFFSET 5
+#define CH_OFFSET 4
 
 #define SD_OFFSET 7
 #define SINGLE_ENDED 1
@@ -9,8 +9,6 @@
 
 #define REFERENCE_OFFSET 3
 #define ADC_OFFSET 2
-
-uint8_t channel_array[8] = {0,2,4,6,1,3,5,7};
 
 uint16_t ADS7828::read(uint8_t channel)
 {
@@ -21,10 +19,8 @@ uint16_t ADS7828::read(uint8_t channel)
 
 uint8_t ADS7828::send_command(uint8_t channel)
 {
-    if(this->mode == SINGLE_ENDED){
-        channel = channel_array[channel];
-    }
-    uint8_t command = (this->mode&1 << SD_OFFSET) | (this->ADC_PWR&1 << ADC_OFFSET) | (this->REFERENCE_PWR&1 << REFERENCE_OFFSET) | (channel&7 << CH_OFFSET);
+    uint8_t csel = (channel >> 1) | ((channel & 0x1) << 2);
+    uint8_t command = ((this->mode&1) << SD_OFFSET) | ((this->ADC_PWR&1) << ADC_OFFSET) | ((this->REFERENCE_PWR&1) << REFERENCE_OFFSET) | ((csel&7) << CH_OFFSET);
     this->wire->beginTransmission(this->address);
     this->wire->write(command);
     return this->wire->endTransmission();
