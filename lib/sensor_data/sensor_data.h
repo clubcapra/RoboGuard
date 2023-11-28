@@ -1,16 +1,24 @@
 #ifndef SENSOR_DATA_H
 #define SENSOR_DATA_H
 
+#include <stdint.h>
+
 #define N_THERMISTORS 8
+#define N_GPIO 3
+#define N_DRIVE 8
 #define N_BATTERY_CELLS 12
 
 typedef struct{
-    float thermistors[N_THERMISTORS];
     float battery_cell_voltage[N_BATTERY_CELLS];
     float battery_temp;
-    uint8_t drive_state;
+    float battery_current;
+    uint8_t drive_state[N_DRIVE];
+    float thermistors[N_THERMISTORS];
     float ambiant_temp;
     float humidity;
+    uint8_t gpio_out[N_GPIO];
+    uint8_t estop_pwr_out;
+    uint8_t estop_status;
 }sensor_data_t;
 
 extern sensor_data_t sensor_data;
