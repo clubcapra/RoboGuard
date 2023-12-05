@@ -17,6 +17,8 @@
 void setup_interfaces();
 void update_interfaces();
 
+uint8_t check_estop();
+
 float thermistor_calc_temp(int adc_reading);
 float battery_calc_cell_v(uint16_t cell_reading, uint16_t prev_cell_reading);
 float lowpass_filter(float previous, float input, float tau, float dt);

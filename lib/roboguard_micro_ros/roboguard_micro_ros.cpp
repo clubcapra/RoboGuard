@@ -44,7 +44,10 @@ void estop_callback(const void * request_msg, void * response_msg){
         (std_srvs__srv__SetBool_Request *) request_msg;
     std_srvs__srv__SetBool_Response * res_in =
         (std_srvs__srv__SetBool_Response *) response_msg;
+
     sensor_data.estop_pwr_out = req_in->data;
+
+    res_in->success = true;
 }
 
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {

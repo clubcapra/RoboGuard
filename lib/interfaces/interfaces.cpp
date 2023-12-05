@@ -7,9 +7,28 @@
 #include "interfaces.h"
 #include "sensor_data.h"
 
+#define FAULT_NO_FAULT              0
+#define FAULT_BATT_UNDER_V          1
+#define FAULT_BATT_CELL_UNDER_V     2
+//#define FAULT_BATT_OVER_CURR        3
+#define FAULT_BATT_OVER_TEMP        4
+#define FAULT_MOTOR_OVERTEMP        5
+#define FAULT_AMBIANT_OVERTEMP      6
+#define FAULT_AMBIANT_HUMIDITY      7
+
+#define BATT_MIN_V      38.4    
+#define BATT_CELL_MIN_V 3.2
+#define BATT_MAX_TEMP   80      //in degree C
+
+#define MOTOR_MAX_TEMP  80      //in degree c
+#define AMBIANT_MAX_TEMP  80      //in degree c
+#define AMBIANT_MAX_HUM   50      //in TBD
+
 #define BME680_ADDRESS 0x77
 #define ADS7828_ADDRESS 72
 #define ADC_TO_CURRENT 0.122100122100122
+
+
 
 const int bat_therm_pin = PB0;
 const int cell_pins[N_BATTERY_CELLS] = {PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PC0, PC1, PC2, PC3};
@@ -53,20 +72,6 @@ void setup_interfaces(){
     pinMode(current_sensor_pin, INPUT_ANALOG);
 }
 
-/*
-typedef struct{
-    float battery_cell_voltage[N_BATTERY_CELLS];
-    float battery_temp;
-    float battery_current;
-    uint8_t drive_state[N_DRIVE];
-    float thermistors[N_THERMISTORS];
-    float ambiant_temp;
-    float humidity;
-    uint8_t gpio_out[N_GPIO];
-    uint8_t estop_pwr_out;
-    uint8_t estop_status;
-}sensor_data_t;
-\*/
 
 void update_interfaces(){
     sensor_data.battery_cell_voltage[0] = battery_calc_cell_v(analogRead(cell_pins[0]), 0);
@@ -75,7 +80,7 @@ void update_interfaces(){
     }
 
     sensor_data.battery_voltage = battery_calc_cell_v(analogRead(cell_pins[N_BATTERY_CELLS - 1]), 0);
-    
+
     sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
     sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
 
@@ -88,7 +93,7 @@ void update_interfaces(){
     }
 
     #ifndef USE_MICRO_ROS
-        Serial3.println(ext_adc.read(thermistor_map[0]));
+    Serial3.println(ext_adc.read(thermistor_map[0]));
     #endif
 
     bme.performReading();
@@ -98,8 +103,44 @@ void update_interfaces(){
     for(int i = 0; i < N_GPIO; i++){
         digitalWrite(gpio_pins[i],sensor_data.gpio_out[i]);
     }
-    digitalWrite(estop_pin,sensor_data.estop_pwr_out);
+    uint8_t fault_code = check_estop();
+    //require a call to estop service to reset the fault
+    if(fault_code){
+        sensor_data.estop_pwr_out = 0;
+    }
+    digitalWrite(estop_pin,(fault_code == 0) && sensor_data.estop_pwr_out);
+}
 
+uint8_t check_estop(){
+    if(sensor_data.battery_voltage < BATT_MIN_V){
+        return(FAULT_BATT_UNDER_V);
+    }
+
+    for(int i = 0; i < N_BATTERY_CELLS; i++){
+        if(sensor_data.battery_cell_voltage[i] < BATT_CELL_MIN_V) {
+            return(FAULT_BATT_CELL_UNDER_V);
+        }
+    }
+
+    if(sensor_data.battery_temp > BATT_MAX_TEMP){
+        return(FAULT_BATT_OVER_TEMP);
+    }
+
+    for(int i = 0; i < N_THERMISTORS; i++){
+        if(sensor_data.thermistors[i] > MOTOR_MAX_TEMP) {
+            return(FAULT_MOTOR_OVERTEMP);
+        }
+    }
+
+    if(sensor_data.ambiant_temp > AMBIANT_MAX_TEMP){
+        return(FAULT_AMBIANT_OVERTEMP);
+    }
+    
+    if(sensor_data.humidity > AMBIANT_MAX_HUM){
+        return(FAULT_AMBIANT_HUMIDITY);
+    }
+
+    return FAULT_NO_FAULT;
 }
 
 float thermistor_calc_temp(int adc_reading){
