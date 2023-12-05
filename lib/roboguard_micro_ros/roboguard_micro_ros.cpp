@@ -7,7 +7,9 @@
 
 #include <std_msgs/msg/float32_multi_array.h>
 #include <std_msgs/msg/float32.h>
+#include <std_srvs/srv/set_bool.h>
 #include <sensor_msgs/msg/battery_state.h>
+
 
 #include "roboguard_micro_ros.h"
 #include "sensor_data.h"
@@ -17,6 +19,10 @@
 rcl_publisher_t thermistor_pub, battery_pub, ambiant_temp_pub, humidity_pub;
 std_msgs__msg__Float32MultiArray thermistor_msg;
 sensor_msgs__msg__BatteryState battery_msg;
+
+rcl_service_t estop_service;
+std_srvs__srv__SetBool_Response estop_res;
+std_srvs__srv__SetBool_Request estop_req;
 
 std_msgs__msg__Float32 ambiant_temp_msg;
 std_msgs__msg__Float32 humidity_msg;
@@ -31,6 +37,15 @@ rcl_timer_t pub_timer;
 int count = 0;
 
 #define RCSOFTCHECK(fn) (fn != RCL_RET_OK)
+
+void estop_callback(const void * request_msg, void * response_msg){
+    // Cast messages to expected types
+    std_srvs__srv__SetBool_Request * req_in =
+        (std_srvs__srv__SetBool_Request *) request_msg;
+    std_srvs__srv__SetBool_Response * res_in =
+        (std_srvs__srv__SetBool_Response *) response_msg;
+    sensor_data.estop_pwr_out = req_in->data;
+}
 
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
@@ -82,6 +97,10 @@ int setup_micro_ros(){
     error += RCSOFTCHECK(rclc_publisher_init_default(&battery_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),"battery"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&humidity_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"humidity"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&ambiant_temp_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"ambiant_temp"));
+
+    //Setup estop service
+    error += RCSOFTCHECK(rclc_service_init_default(&estop_service, &node, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), "set_estop"));
+    error += RCSOFTCHECK(rclc_executor_add_service(&executor, &estop_service, &estop_req, &estop_res, estop_callback));
 
     // create timer,
     const unsigned int timer_timeout = 66;

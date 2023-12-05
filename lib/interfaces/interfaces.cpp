@@ -73,6 +73,9 @@ void update_interfaces(){
     for(int i = 1; i < N_BATTERY_CELLS; i++){
         sensor_data.battery_cell_voltage[i] = battery_calc_cell_v(analogRead(cell_pins[i]), analogRead(cell_pins[i-1]));
     }
+
+    sensor_data.battery_voltage = battery_calc_cell_v(analogRead(cell_pins[N_BATTERY_CELLS - 1]), 0);
+    
     sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
     sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
 
