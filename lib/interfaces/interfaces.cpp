@@ -7,7 +7,7 @@
 #include "interfaces.h"
 #include "sensor_data.h"
 
-#define BME680_ADDRESS 0x76
+#define BME680_ADDRESS 0x77
 #define ADS7828_ADDRESS 72
 #define ADC_TO_CURRENT 0.122100122100122
 
@@ -29,10 +29,15 @@ ADS7828 ext_adc(ADS7828_ADDRESS,&wire1,ADS7828_SINGLE_ENDED, 1, 0);
 
 void setup_interfaces(){
     bme.begin(BME680_ADDRESS);
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    bme.setGasHeater(0, 150); // 320*C for 150 ms
     //Setup ADC
     analogReadResolution(ADC_N_BITS);
 
-    pinMode(bat_therm_pin, INPUT_ANALOG);
+    pinMode(bat_therm_pin, INPUT_ANALOG); 
 
     for(int i = 0; i < N_BATTERY_CELLS; i++){
         pinMode(cell_pins[i], INPUT_ANALOG);
@@ -79,6 +84,10 @@ void update_interfaces(){
         sensor_data.thermistors[i] = thermistor_calc_temp(ext_adc.read(thermistor_map[i]));
     }
 
+    #ifndef USE_MICRO_ROS
+        Serial3.println(ext_adc.read(thermistor_map[0]));
+    #endif
+
     bme.performReading();
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
@@ -109,6 +118,7 @@ float battery_calc_cell_v(uint16_t cell_reading, uint16_t prev_cell_reading){
     result = ((cell_reading - prev_cell_reading)/ADC_MAX_VALUE) * ADC_VCC * CELL_RDIV_RATIO;
     return result;
 }
+
 
 float calc_current(uint16_t adc_reading){
     //6.6mv/A (+- 200A) centered at vcc/2

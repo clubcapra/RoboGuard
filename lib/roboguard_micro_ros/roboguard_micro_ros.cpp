@@ -6,6 +6,7 @@
 #include <rclc/executor.h>
 
 #include <std_msgs/msg/float32_multi_array.h>
+#include <std_msgs/msg/float32.h>
 #include <sensor_msgs/msg/battery_state.h>
 
 #include "roboguard_micro_ros.h"
@@ -13,9 +14,13 @@
 
 #define BATTERY_CAPACITY 6.5 //in Ah
 
-rcl_publisher_t thermistor_pub, battery_pub;
+rcl_publisher_t thermistor_pub, battery_pub, ambiant_temp_pub, humidity_pub;
 std_msgs__msg__Float32MultiArray thermistor_msg;
 sensor_msgs__msg__BatteryState battery_msg;
+
+std_msgs__msg__Float32 ambiant_temp_msg;
+std_msgs__msg__Float32 humidity_msg;
+
 
 rclc_executor_t executor;
 rclc_support_t support;
@@ -32,6 +37,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     if (timer != NULL) {
         RCSOFTCHECK(rcl_publish(&thermistor_pub, &thermistor_msg, NULL));
         RCSOFTCHECK(rcl_publish(&battery_pub, &battery_msg, NULL));
+        RCSOFTCHECK(rcl_publish(&ambiant_temp_pub, &ambiant_temp_msg, NULL));
+        RCSOFTCHECK(rcl_publish(&humidity_pub, &humidity_msg, NULL));
     }
 }
 
@@ -58,6 +65,9 @@ int setup_micro_ros(){
     battery_msg.design_capacity = BATTERY_CAPACITY;
     battery_msg.present = 1;
     battery_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_HEALTH_GOOD;
+    thermistor_msg.data.data = sensor_data.battery_cell_voltage;
+    battery_msg.cell_voltage.size = N_BATTERY_CELLS;
+    battery_msg.cell_voltage.capacity = 1;
 
     allocator = rcl_get_default_allocator();
 
@@ -70,7 +80,8 @@ int setup_micro_ros(){
     // create publisher
     error += RCSOFTCHECK(rclc_publisher_init_default(&thermistor_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),"thermistors"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&battery_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),"battery"));
-
+    error += RCSOFTCHECK(rclc_publisher_init_default(&humidity_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"humidity"));
+    error += RCSOFTCHECK(rclc_publisher_init_default(&ambiant_temp_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"ambiant_temp"));
 
     // create timer,
     const unsigned int timer_timeout = 66;
@@ -101,6 +112,15 @@ int clean_micro_ros(){
 }
 
 int update_micro_ros(){
+    //publishing is done in the timer interrupt
+    thermistor_msg.data.data = sensor_data.thermistors;
+    battery_msg.voltage = sensor_data.battery_voltage;
+    battery_msg.current = sensor_data.battery_current;
+    battery_msg.temperature = sensor_data.battery_temp;
+
+    humidity_msg.data = sensor_data.humidity;
+    ambiant_temp_msg.data = sensor_data.ambiant_temp;
+
     rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
     if(!alive){
         alive = setup_micro_ros();
