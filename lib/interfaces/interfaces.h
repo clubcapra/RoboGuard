@@ -8,7 +8,7 @@
 #define ADC_MAX_VALUE 4095.0    // Max adc value
 #define ADC_N_BITS 12
 #define ADC_VCC 3.3
-#define CELL_RDIV_RATIO 0.0625
+#define CELL_RDIV_RATIO 16
 
 
 #define THERM_TAU 1

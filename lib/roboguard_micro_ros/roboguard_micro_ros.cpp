@@ -34,6 +34,8 @@ rcl_allocator_t allocator;
 rcl_node_t node;
 rcl_timer_t pub_timer;
 
+const int estop_pin = PA12;
+
 int count = 0;
 
 #define RCSOFTCHECK(fn) (fn != RCL_RET_OK)
@@ -44,8 +46,11 @@ void estop_callback(const void * request_msg, void * response_msg){
         (std_srvs__srv__SetBool_Request *) request_msg;
     std_srvs__srv__SetBool_Response * res_in =
         (std_srvs__srv__SetBool_Response *) response_msg;
-
     sensor_data.estop_pwr_out = req_in->data;
+    //if asked to turn off power, DO IT NOW
+    if(!req_in->data){
+        digitalWrite(estop_pin, req_in->data);
+    }
 
     res_in->success = true;
 }
@@ -101,17 +106,17 @@ int setup_micro_ros(){
     error += RCSOFTCHECK(rclc_publisher_init_default(&humidity_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"humidity"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&ambiant_temp_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"ambiant_temp"));
 
-    //Setup estop service
-    error += RCSOFTCHECK(rclc_service_init_default(&estop_service, &node, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), "set_estop"));
-    error += RCSOFTCHECK(rclc_executor_add_service(&executor, &estop_service, &estop_req, &estop_res, estop_callback));
-
     // create timer,
     const unsigned int timer_timeout = 66;
     error += RCSOFTCHECK(rclc_timer_init_default(&pub_timer,&support,RCL_MS_TO_NS(timer_timeout),timer_callback));
 
     // create executor
-    error += RCSOFTCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
+    error += RCSOFTCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));//ONLY ALLOWS 2 THINGS TO BE ADDED TO EXECUTOR
     error += RCSOFTCHECK(rclc_executor_add_timer(&executor, &pub_timer));
+
+    //Setup estop service
+    error += RCSOFTCHECK(rclc_service_init_default(&estop_service, &node, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), "set_estop"));
+    error += RCSOFTCHECK(rclc_executor_add_service(&executor, &estop_service, &estop_req, &estop_res, estop_callback));
 
     alive = !error;
 
@@ -139,6 +144,7 @@ int update_micro_ros(){
     battery_msg.voltage = sensor_data.battery_voltage;
     battery_msg.current = sensor_data.battery_current;
     battery_msg.temperature = sensor_data.battery_temp;
+    battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
 
     humidity_msg.data = sensor_data.humidity;
     ambiant_temp_msg.data = sensor_data.ambiant_temp;
