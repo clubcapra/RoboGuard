@@ -21,6 +21,7 @@ uint8_t check_estop();
 
 float thermistor_calc_temp(int adc_reading);
 float battery_calc_cell_v(uint16_t cell_reading, uint16_t prev_cell_reading);
+double battery_calc_charge(double voltage);
 float lowpass_filter(float previous, float input, float tau, float dt);
 float calc_current(uint16_t adc_reading);
 

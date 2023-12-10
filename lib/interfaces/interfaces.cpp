@@ -10,14 +10,14 @@
 #define FAULT_NO_FAULT              0
 #define FAULT_BATT_UNDER_V          1
 #define FAULT_BATT_CELL_UNDER_V     2
-//#define FAULT_BATT_OVER_CURR        3
+#define FAULT_BATT_OVER_CURR        3
 #define FAULT_BATT_OVER_TEMP        4
 #define FAULT_MOTOR_OVERTEMP        5
 #define FAULT_AMBIANT_OVERTEMP      6
 #define FAULT_AMBIANT_HUMIDITY      7
 
 #define BATT_MIN_V      38.4    
-#define BATT_CELL_MIN_V 3.2
+#define BATT_CELL_MIN_V 3.5
 #define BATT_MAX_TEMP   80      //in degree C
 
 #define MOTOR_MAX_TEMP  80      //in degree c
@@ -80,10 +80,11 @@ void update_interfaces(){
     }
 
     sensor_data.battery_voltage = battery_calc_cell_v(analogRead(cell_pins[N_BATTERY_CELLS - 1]), 0);
+    sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage);
 
     sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
     sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
-
+    
     for(int i = 0; i < N_DRIVE; i++){
         sensor_data.drive_state[i] = digitalRead(drive_status_pins[i]);
     }
@@ -163,6 +164,31 @@ float battery_calc_cell_v(uint16_t cell_reading, uint16_t prev_cell_reading){
     return result;
 }
 
+double battery_calc_charge(double voltage) {    
+    //calibration table meant for a 12s battery
+    int capacities[] = {100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0};
+    double voltages[] = {50.4, 49.8, 49.32, 48.96, 48.24, 47.76, 47.4, 46.92, 46.44, 46.2, 46.08, 45.84, 45.6, 45.48, 45.24, 45, 44.76, 44.52, 44.28, 43.32, 39.24};
+
+    // Clip voltage within the range
+    if (voltage > voltages[0]) {
+        voltage = voltages[0];
+    } else if (voltage < voltages[20]) {
+        voltage = voltages[20];
+    }
+
+    // Linear interpolation
+    int i;
+    for (i = 0; i < 20; ++i) {
+        if (voltage >= voltages[i]) {
+            break;
+        }
+    }
+
+    // Calculate charge percentage using linear interpolation
+    double charge = capacities[i] + (capacities[i + 1] - capacities[i]) * (voltage - voltages[i]) / (voltages[i + 1] - voltages[i]);
+
+    return charge;
+}
 
 float calc_current(uint16_t adc_reading){
     //6.6mv/A (+- 200A) centered at vcc/2

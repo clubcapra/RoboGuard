@@ -82,15 +82,23 @@ int setup_micro_ros(){
     thermistor_msg.data.size = N_THERMISTORS;
     thermistor_msg.data.capacity = 1;
 
-    battery_msg.capacity = BATTERY_CAPACITY;
+    battery_msg.capacity = nan("1");
+    battery_msg.design_capacity = BATTERY_CAPACITY;
     battery_msg.charge = nan("1");
     battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LIPO;
-    battery_msg.design_capacity = BATTERY_CAPACITY;
     battery_msg.present = 1;
-    battery_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_HEALTH_GOOD;
+    battery_msg.power_supply_health = nan("1");
     thermistor_msg.data.data = sensor_data.battery_cell_voltage;
     battery_msg.cell_voltage.size = N_BATTERY_CELLS;
     battery_msg.cell_voltage.capacity = 1;
+
+    battery_msg.cell_temperature.size=N_BATTERY_CELLS;
+    if(battery_msg.cell_temperature.data == NULL){
+        battery_msg.cell_temperature.data = (float*)malloc(N_BATTERY_CELLS * sizeof(float));
+        for(int i = 0; i<N_BATTERY_CELLS; i++){
+            battery_msg.cell_temperature.data[i] = nan("1");
+        }
+    }
 
     allocator = rcl_get_default_allocator();
 
@@ -145,6 +153,7 @@ int update_micro_ros(){
     battery_msg.current = sensor_data.battery_current;
     battery_msg.temperature = sensor_data.battery_temp;
     battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
+    battery_msg.percentage = sensor_data.battery_percent;
 
     humidity_msg.data = sensor_data.humidity;
     ambiant_temp_msg.data = sensor_data.ambiant_temp;

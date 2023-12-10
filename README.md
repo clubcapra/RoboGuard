@@ -34,6 +34,19 @@ https://github.com/stlink-org/stlink/blob/master/config/udev/rules.d/49-stlinkv3
     use ./scripts/launch_micro_ros_agent.sh\
     This will allow the pi to communicate over serial with roboguard and communicate the node and the topics over the network
 
+TO setup can :
+add this line to /boot/firmware/config.txt (under section all)
+
+dtoverlay=mcp251xfd,spi0-0,oscillator=20000000,interrupt=25
+
+
+TO setup ros agent on boot 
+
+sudo cp ./scripts/launch-micro-ros.service /etc/systemd/system/launch-micro-ros.service
+sudo systemctl enable launch-micro-ros.service
+
+check the path in the script corresponds to the path of the project
+
 
 # Different build versions
 WATCH OUT\

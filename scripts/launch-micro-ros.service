@@ -1,0 +1,11 @@
+[Unit]
+Description=Launch micro-ros agent at boot
+Requires=docker.service
+After=docker.service
+
+[Service]
+ExecStart=/home/capra/RoboGuard/scripts/launch_micro_ros_agent.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

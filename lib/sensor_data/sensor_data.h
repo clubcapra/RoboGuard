@@ -13,6 +13,7 @@ typedef struct{
     float battery_temp;
     float battery_voltage;
     float battery_current;
+    float battery_percent;//(0 to 1)
     uint8_t drive_state[N_DRIVE];
     float thermistors[N_THERMISTORS];
     float ambiant_temp;
