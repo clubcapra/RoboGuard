@@ -87,7 +87,7 @@ int setup_micro_ros(){
     battery_msg.charge = nan("1");
     battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LIPO;
     battery_msg.present = 1;
-    battery_msg.power_supply_health = nan("1");
+    battery_msg.power_supply_health = 0;
     thermistor_msg.data.data = sensor_data.battery_cell_voltage;
     battery_msg.cell_voltage.size = N_BATTERY_CELLS;
     battery_msg.cell_voltage.capacity = 1;
@@ -99,7 +99,10 @@ int setup_micro_ros(){
             battery_msg.cell_temperature.data[i] = nan("1");
         }
     }
-
+    if(rmw_uros_ping_agent(100, 3) != RMW_RET_OK){
+        return(0);
+    }
+    
     allocator = rcl_get_default_allocator();
 
     //create init_options
