@@ -47,6 +47,23 @@ sudo systemctl enable launch-micro-ros.service
 
 check the path in the script corresponds to the path of the project
 
+# Setup can on boot
+sudo nano /etc/modules-load.d/can.conf
+
+Content :\ 
+can\
+can_raw\
+
+sudo systemctl start systemd-networkd\
+sudo systemctl enable systemd-networkd\
+
+sudo nano /etc/systemd/network/80-can.network
+
+content:\
+[Match]
+Name=can0
+[CAN]
+BitRate=400K
 
 # Different build versions
 WATCH OUT\
@@ -57,3 +74,4 @@ there are 3 build configs, env:light env:with_micro_ros_precompiled and env:with
 "with_micro_ros" is meant to be built on a linux machine (due to micro-ros limitations) and is meant as the release version that is uploaded in the robot.
 
 "env:with_micro_ros_precompiled" uses a pre-built version of micro-ros, you can re-generate it using the gen_precompiled script, it is meant to reduce first build time and allow for developpement on windows
+
