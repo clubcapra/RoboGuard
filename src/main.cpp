@@ -2,7 +2,7 @@
 #include <IWatchdog.h>
 #include "sensor_data.h"
 #include <Wire.h>
-
+#include <mylora.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 #include "interfaces.h"
@@ -14,22 +14,24 @@
 #include "roboguard_micro_ros.h"
 #endif
 
-#define DEBUG_LED PB4
+#define DEBUG_LED PC12
 
 sensor_data_t sensor_data;
 
 #ifndef USE_MICRO_ROS
 HardwareSerial Serial3(USART3);
+HardwareSerial Serial1(USART1);
 #endif
 
 void setup() {
   //enable watchdog to reset if stalled
   IWatchdog.begin(WATCHDOG_TIMEOUT);
 
-  setup_interfaces();
+  //setup_interfaces();
   pinMode(DEBUG_LED, OUTPUT);
-  digitalWrite(DEBUG_LED, 0);
+  digitalWrite(DEBUG_LED,1);
 
+  LoRa_init();
   #ifdef USE_MICRO_ROS
   setup_micro_ros();
   #else
@@ -37,16 +39,24 @@ void setup() {
   Serial3.setRx(PC11);
   Serial3.setTx(PC10);
   Serial3.begin(115200);
+
+  Serial1.setRx(PA10);
+  Serial1.setTx(PA9);
+  Serial1.begin(9600);
+  Serial1.println("BOB");
   #endif
 }
 
 
 void loop() {
-  update_interfaces();
+  //update_interfaces();
+  lora_update();
+  digitalWrite(DEBUG_LED,lora_state);
   #ifdef USE_MICRO_ROS
   digitalWrite(DEBUG_LED,update_micro_ros());
   #else
   //Place developpement loop here
   #endif
+  delay(10);
   IWatchdog.reload();
 }
