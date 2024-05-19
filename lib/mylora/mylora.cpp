@@ -21,14 +21,18 @@ void LoRa_init()
         abort();
     }
     LoRa.onReceive(onReceive1);
-    Serial1.printf("LoRa Init\n");
+    LoRa.receive();
+    Serial1.println("LoRa Init");
     lora_state = 0;
 }
 
 
 void onReceive1(int packetSize) // ! from isr
 {
+    Serial1.println("RCV");
     lora_state = LoRa.read();
+    Serial1.print("STATE : ");
+    Serial1.println(lora_state);
     while (LoRa.available()){
         LoRa.read();
     }
@@ -37,32 +41,28 @@ void onReceive1(int packetSize) // ! from isr
 
 void LoRa_send()
 {
+    Serial1.println("SEND");
     LoRa.beginPacket();
-    #ifdef RCV
-    LoRa.print("RX GOOD");
-    #else
-    LoRa.write(!digitalRead(B1));
-    #endif
+    LoRa.write(1);
     LoRa.endPacket();
-    Serial.println("Packet sent");
+    Serial1.println("Packet sent");
     LoRa.receive();
 }
 
 void send_at_interval() {
+    Serial1.println("send_at_interval");
     static unsigned long previousMillis = 0;
-    // Check if it's time to execute the action
     if (millis() - previousMillis >= 350) {
-        // Save the last time the action was executed
         previousMillis = millis();
-        // Call your function here
         LoRa_send();
     }
 }
 
-int lora_update(){
+void lora_update(){
     static unsigned long previousRCV = 0;
     if(rcv_flg){
         rcv_flg = 0;
+        LoRa_send();
         previousRCV = millis();
     }
     else if(millis() - previousRCV > TIMEOUT){

@@ -6,7 +6,7 @@
 
 void LoRa_init();
 void onReceive1(int packetSize);
-int lora_update();
+void lora_update();
 
 extern int lora_state;
 

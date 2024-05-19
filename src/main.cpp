@@ -27,11 +27,9 @@ void setup() {
   //enable watchdog to reset if stalled
   IWatchdog.begin(WATCHDOG_TIMEOUT);
 
-  //setup_interfaces();
+  setup_interfaces();
   pinMode(DEBUG_LED, OUTPUT);
   digitalWrite(DEBUG_LED,1);
-
-  LoRa_init();
   #ifdef USE_MICRO_ROS
   setup_micro_ros();
   #else
@@ -43,13 +41,15 @@ void setup() {
   Serial1.setRx(PA10);
   Serial1.setTx(PA9);
   Serial1.begin(9600);
-  Serial1.println("BOB");
+  Serial1.println("Initializing...");
   #endif
+
+  LoRa_init();
 }
 
 
 void loop() {
-  //update_interfaces();
+  update_interfaces();
   lora_update();
   digitalWrite(DEBUG_LED,lora_state);
   #ifdef USE_MICRO_ROS
@@ -57,6 +57,5 @@ void loop() {
   #else
   //Place developpement loop here
   #endif
-  delay(10);
   IWatchdog.reload();
 }
