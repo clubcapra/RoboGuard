@@ -20,8 +20,8 @@ sensor_data_t sensor_data;
 
 #ifndef USE_MICRO_ROS
 HardwareSerial Serial3(USART3);
-HardwareSerial Serial1(USART1);
 #endif
+HardwareSerial Serial1(USART1);
 
 void setup() {
   //enable watchdog to reset if stalled
