@@ -43,19 +43,21 @@ void setup() {
   Serial1.begin(9600);
   Serial1.println("Initializing...");
   #endif
-
+  
   LoRa_init();
 }
 
 
 void loop() {
+  
   update_interfaces();
   lora_update();
   digitalWrite(DEBUG_LED,lora_state);
   #ifdef USE_MICRO_ROS
-  digitalWrite(DEBUG_LED,update_micro_ros());
+  update_micro_ros();
   #else
   //Place developpement loop here
   #endif
+ 
   IWatchdog.reload();
 }

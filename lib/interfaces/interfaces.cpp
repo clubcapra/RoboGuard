@@ -3,6 +3,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 #include "ADS7828.h"
+#include "mylora.h"
 
 #include "interfaces.h"
 #include "sensor_data.h"
@@ -97,10 +98,12 @@ void update_interfaces(){
     Serial3.println(ext_adc.read(thermistor_map[0]));
     #endif
 
+    
     bme.performReading();
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
     
+
     for(int i = 0; i < N_GPIO; i++){
         digitalWrite(gpio_pins[i],sensor_data.gpio_out[i]);
     }
@@ -109,7 +112,7 @@ void update_interfaces(){
     if(fault_code){
         sensor_data.estop_pwr_out = 0;
     }
-    digitalWrite(estop_pin,(fault_code == 0) && sensor_data.estop_pwr_out);
+    digitalWrite(estop_pin,(fault_code == 0) && sensor_data.estop_pwr_out && lora_state);
 }
 
 uint8_t check_estop(){

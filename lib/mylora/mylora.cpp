@@ -6,6 +6,8 @@
 int rcv_flg = 0;
 int lora_state = 0;
 
+const int estop_pin = PA12;
+
 void LoRa_init()
 {
     SPI.setMISO(PB4);
@@ -37,6 +39,9 @@ void onReceive1(int packetSize) // ! from isr
         LoRa.read();
     }
     rcv_flg=1;
+    if(!lora_state){
+        digitalWrite(estop_pin, lora_state);
+    }
 }
 
 void LoRa_send()
