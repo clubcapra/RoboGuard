@@ -1,7 +1,8 @@
 #include "mylora.h"
 
 #define TIMEOUT 500
-
+#define FREQ_CANADA 904600E3
+#define FREQ_EURO 869525E3
 
 int rcv_flg = 0;
 int lora_state = 0;
@@ -17,7 +18,7 @@ void LoRa_init()
     LoRa.setTxPower(20);
     
     LoRa.setSyncWord(0xBE);
-    if (!LoRa.begin(904600E3)) // frequency
+    if (!LoRa.begin(FREQ_CANADA)) // frequency
     {
         Serial1.println("\n[ERROR] LoRa init failed");
         abort();

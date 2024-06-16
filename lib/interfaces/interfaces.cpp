@@ -86,9 +86,10 @@ void update_interfaces(){
     sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
     sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
     
+    /*
     for(int i = 0; i < N_DRIVE; i++){
         sensor_data.drive_state[i] = digitalRead(drive_status_pins[i]);
-    }
+    }*/
 
     for(int i = 0; i < N_THERMISTORS; i++){
         sensor_data.thermistors[i] = thermistor_calc_temp(ext_adc.read(thermistor_map[i]));
@@ -99,9 +100,9 @@ void update_interfaces(){
     #endif
 
     
-    bme.performReading();
-    sensor_data.ambiant_temp = bme.readTemperature();
-    sensor_data.humidity = bme.readHumidity();
+    //bme.performReading();
+    //sensor_data.ambiant_temp = bme.readTemperature();
+    //sensor_data.humidity = bme.readHumidity();
     
 
     for(int i = 0; i < N_GPIO; i++){
@@ -130,11 +131,12 @@ uint8_t check_estop(){
         return(FAULT_BATT_OVER_TEMP);
     }
 
+    /*
     for(int i = 0; i < N_THERMISTORS; i++){
         if(sensor_data.thermistors[i] > MOTOR_MAX_TEMP) {
             return(FAULT_MOTOR_OVERTEMP);
         }
-    }
+    }*/
 
     if(sensor_data.ambiant_temp > AMBIANT_MAX_TEMP){
         return(FAULT_AMBIANT_OVERTEMP);
