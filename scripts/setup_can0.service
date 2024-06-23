@@ -5,7 +5,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/home/capra/Roboguard/scripts/setup_can0.sh
+ExecStart=/home/capra/RoboGuard/scripts/setup_can0.sh
 RemainAfterExit=yes
 
 [Install]
