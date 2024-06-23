@@ -75,3 +75,17 @@ there are 3 build configs, env:light env:with_micro_ros_precompiled and env:with
 
 "env:with_micro_ros_precompiled" uses a pre-built version of micro-ros, you can re-generate it using the gen_precompiled script, it is meant to reduce first build time and allow for developpement on windows
 
+
+# Troubleshooting
+
+If docker fails to start with this error:
+```
+Jun 22 19:55:57 Roboguard-pi dockerd[4937]: time="2024-06-22T19:55:57.304899616+02:00" level=info msg="Starting up"
+Jun 22 19:55:57 Roboguard-pi dockerd[4937]: time="2024-06-22T19:55:57.547434828+02:00" level=info msg="[graphdriver] using prior storage driver: overlay2"
+Jun 22 19:55:57 Roboguard-pi dockerd[4937]: time="2024-06-22T19:55:57.574117206+02:00" level=info msg="Loading containers: start."
+Jun 22 19:55:57 Roboguard-pi dockerd[4937]: time="2024-06-22T19:55:57.698761511+02:00" level=warning msg="failed to find iptables" error="exec: \"iptables\": executable file not found in $PATH"
+Jun 22 19:55:57 Roboguard-pi dockerd[4937]: time="2024-06-22T19:55:57.704862473+02:00" level=info msg="stopping event stream following graceful shutdown" error="<nil>" module=libcontainerd namespace=moby
+Jun 22 19:55:57 Roboguard-pi dockerd[4937]: failed to start daemon: Error initializing network controller: error obtaining controller instance: failed to register "bridge" driver: failed to create NAT chain DOCKER: i>
+Jun 22 19:55:57 Roboguard-pi systemd[1]: docker.service: Main process exited, code=exited, status=1/FAILURE
+```
+See this comment https://github.com/docker/for-linux/issues/1437#issuecomment-1293818806 to solve the issue.
