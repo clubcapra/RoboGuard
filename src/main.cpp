@@ -31,13 +31,14 @@ void setup() {
   pinMode(DEBUG_LED, OUTPUT);
   digitalWrite(DEBUG_LED,1);
 
+  
+  #ifdef USE_MICRO_ROS
+  setup_micro_ros();
+  #else
   Serial1.setRx(PA10);
   Serial1.setTx(PA9);
   Serial1.begin(9600);
   Serial1.println("Initializing...");
-  #ifdef USE_MICRO_ROS
-  setup_micro_ros();
-  #else
   Serial3.setRx(PC11);
   Serial3.setTx(PC10);
   Serial3.begin(115200);

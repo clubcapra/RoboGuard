@@ -91,9 +91,10 @@ void update_interfaces(){
         sensor_data.drive_state[i] = digitalRead(drive_status_pins[i]);
     }*/
 
+   /*
     for(int i = 0; i < N_THERMISTORS; i++){
         sensor_data.thermistors[i] = thermistor_calc_temp(ext_adc.read(thermistor_map[i]));
-    }
+    }*/
 
     #ifndef USE_MICRO_ROS
     Serial3.println(ext_adc.read(thermistor_map[0]));
