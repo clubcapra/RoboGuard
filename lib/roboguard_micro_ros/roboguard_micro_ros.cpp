@@ -106,7 +106,13 @@ int setup_micro_ros(){
     allocator = rcl_get_default_allocator();
 
     //create init_options
-    error += RCSOFTCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+
+    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+    error += RCSOFTCHECK(rcl_init_options_init(&init_options, allocator));
+    error += RCSOFTCHECK(rcl_init_options_set_domain_id(&init_options, ROS_DOMAIN_ID));
+
+    // Initialize rclc support object with custom options
+    error += RCSOFTCHECK(rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator));
 
     // create node
     error += RCSOFTCHECK(rclc_node_init_default(&node, "RoboGuard_Node", "RoboGuard", &support));

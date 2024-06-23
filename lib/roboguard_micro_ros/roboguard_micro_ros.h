@@ -4,4 +4,6 @@ int setup_micro_ros();
 int clean_micro_ros();
 int update_micro_ros();
 
+#define ROS_DOMAIN_ID 96
+
 #endif
