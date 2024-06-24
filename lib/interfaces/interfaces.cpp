@@ -18,7 +18,7 @@
 #define FAULT_AMBIANT_HUMIDITY      7
 
 #define BATT_MIN_V      38.4    
-#define BATT_CELL_MIN_V 3.5
+#define BATT_CELL_MIN_V 3.3
 #define BATT_MAX_TEMP   80      //in degree C
 
 #define MOTOR_MAX_TEMP  80      //in degree c
