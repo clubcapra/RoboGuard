@@ -137,7 +137,7 @@ uint8_t check_estop(){
         if(sensor_data.thermistors[i] > MOTOR_MAX_TEMP) {
             return(FAULT_MOTOR_OVERTEMP);
         }
-    }*/
+    }
 
     if(sensor_data.ambiant_temp > AMBIANT_MAX_TEMP){
         return(FAULT_AMBIANT_OVERTEMP);
@@ -145,7 +145,7 @@ uint8_t check_estop(){
     
     if(sensor_data.humidity > AMBIANT_MAX_HUM){
         return(FAULT_AMBIANT_HUMIDITY);
-    }
+    }*/
 
     return FAULT_NO_FAULT;
 }
