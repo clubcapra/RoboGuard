@@ -1,6 +1,6 @@
 #include "mylora.h"
 
-#define TIMEOUT 500
+#define TIMEOUT 1000
 #define FREQ_CANADA 904600E3
 #define FREQ_EURO 869525E3
 

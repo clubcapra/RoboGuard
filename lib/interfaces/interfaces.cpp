@@ -48,6 +48,9 @@ Adafruit_BME680 bme(&wire1);
 ADS7828 ext_adc(ADS7828_ADDRESS,&wire1,ADS7828_SINGLE_ENDED, 1, 0);
 
 void setup_interfaces(){
+    pinMode(estop_pin, OUTPUT);
+    pinMode(estop_status_pin, INPUT);
+
     bme.begin(BME680_ADDRESS);
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
@@ -68,12 +71,11 @@ void setup_interfaces(){
     for(int i = 0; i < N_GPIO; i++){
         pinMode(gpio_pins[i], OUTPUT);
     }
-    pinMode(estop_pin, OUTPUT);
-    pinMode(estop_status_pin, INPUT);
+    
     pinMode(current_sensor_pin, INPUT_ANALOG);
 }
 
-
+ 
 void update_interfaces(){
     sensor_data.battery_cell_voltage[0] = battery_calc_cell_v(analogRead(cell_pins[0]), 0);
     for(int i = 1; i < N_BATTERY_CELLS; i++){
@@ -81,9 +83,10 @@ void update_interfaces(){
     }
 
     sensor_data.battery_voltage = battery_calc_cell_v(analogRead(cell_pins[N_BATTERY_CELLS - 1]), 0);
-    sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage);
+    sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage)/100;
 
-    sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
+    sensor_data.battery_temp = thermistor_calc_temp(ext_adc.read(thermistor_map[0]));
+    //sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
     sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
     
     /*
@@ -91,7 +94,7 @@ void update_interfaces(){
         sensor_data.drive_state[i] = digitalRead(drive_status_pins[i]);
     }*/
 
-   /*
+    /*
     for(int i = 0; i < N_THERMISTORS; i++){
         sensor_data.thermistors[i] = thermistor_calc_temp(ext_adc.read(thermistor_map[i]));
     }*/
@@ -102,8 +105,8 @@ void update_interfaces(){
 
     
     //bme.performReading();
-    //sensor_data.ambiant_temp = bme.readTemperature();
-    //sensor_data.humidity = bme.readHumidity();
+    sensor_data.ambiant_temp = bme.readTemperature();
+    sensor_data.humidity = bme.readHumidity();
     
 
     for(int i = 0; i < N_GPIO; i++){
@@ -114,7 +117,7 @@ void update_interfaces(){
     if(fault_code){
         sensor_data.estop_pwr_out = 0;
     }
-    digitalWrite(estop_pin,(fault_code == 0) && sensor_data.estop_pwr_out && lora_state);
+    digitalWrite(estop_pin,(fault_code == 0) && sensor_data.estop_pwr_out /*&& lora_state*/);
 }
 
 uint8_t check_estop(){
@@ -127,7 +130,7 @@ uint8_t check_estop(){
             return(FAULT_BATT_CELL_UNDER_V);
         }
     }
-
+    
     if(sensor_data.battery_temp > BATT_MAX_TEMP){
         return(FAULT_BATT_OVER_TEMP);
     }
