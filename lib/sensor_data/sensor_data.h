@@ -3,9 +3,7 @@
 
 #include <stdint.h>
 
-#define N_THERMISTORS 8
-#define N_GPIO 3
-#define N_DRIVE 8
+#define N_THERMISTORS 1
 #define N_BATTERY_CELLS 12
 
 typedef struct{
@@ -14,11 +12,8 @@ typedef struct{
     float battery_voltage;
     float battery_current;
     float battery_percent;//(0 to 1)
-    uint8_t drive_state[N_DRIVE];
-    float thermistors[N_THERMISTORS];
     float ambiant_temp;
     float humidity;
-    uint8_t gpio_out[N_GPIO];
     uint8_t estop_pwr_out;
     uint8_t estop_status;
 }sensor_data_t;

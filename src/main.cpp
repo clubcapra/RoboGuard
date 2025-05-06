@@ -2,7 +2,6 @@
 #include <IWatchdog.h>
 #include "sensor_data.h"
 #include <Wire.h>
-#include <mylora.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 #include "interfaces.h"
@@ -14,7 +13,7 @@
 #include "roboguard_micro_ros.h"
 #endif
 
-#define DEBUG_LED PC12
+#define DEBUG_LED PC13
 
 sensor_data_t sensor_data;
 
@@ -44,15 +43,15 @@ void setup() {
   Serial3.begin(115200);
   #endif
   
-  LoRa_init();
+  
 }
 
 
 void loop() {
   
   update_interfaces();
-  lora_update();
-  digitalWrite(DEBUG_LED,lora_state);
+  
+  //digitalWrite(DEBUG_LED,1);
   #ifdef USE_MICRO_ROS
   update_micro_ros();
   #else

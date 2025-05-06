@@ -16,8 +16,8 @@
 
 #define BATTERY_CAPACITY 6.5 //in Ah
 
-rcl_publisher_t thermistor_pub, battery_pub, ambiant_temp_pub, humidity_pub;
-std_msgs__msg__Float32MultiArray thermistor_msg;
+rcl_publisher_t /*thermistor_pub,*/ battery_pub, ambiant_temp_pub, humidity_pub;
+//std_msgs__msg__Float32MultiArray thermistor_msg;
 sensor_msgs__msg__BatteryState battery_msg;
 
 rcl_service_t estop_service;
@@ -58,7 +58,7 @@ void estop_callback(const void * request_msg, void * response_msg){
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
-        RCSOFTCHECK(rcl_publish(&thermistor_pub, &thermistor_msg, NULL));
+        //RCSOFTCHECK(rcl_publish(&thermistor_pub, &thermistor_msg, NULL));
         RCSOFTCHECK(rcl_publish(&battery_pub, &battery_msg, NULL));
         RCSOFTCHECK(rcl_publish(&ambiant_temp_pub, &ambiant_temp_msg, NULL));
         RCSOFTCHECK(rcl_publish(&humidity_pub, &humidity_msg, NULL));
@@ -78,9 +78,9 @@ int setup_micro_ros(){
     set_microros_serial_transports(Serial3);
 
     //initialize messages
-    thermistor_msg.data.data = sensor_data.thermistors;
-    thermistor_msg.data.size = N_THERMISTORS;
-    thermistor_msg.data.capacity = 1;
+    //thermistor_msg.data.data = sensor_data.thermistors;
+    //thermistor_msg.data.size = N_THERMISTORS;
+    //thermistor_msg.data.capacity = 1;
 
     battery_msg.capacity = nan("1");
     battery_msg.design_capacity = BATTERY_CAPACITY;
@@ -88,17 +88,18 @@ int setup_micro_ros(){
     battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LIPO;
     battery_msg.present = 1;
     battery_msg.power_supply_health = 0;
-    thermistor_msg.data.data = sensor_data.battery_cell_voltage;
+    battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
     battery_msg.cell_voltage.size = N_BATTERY_CELLS;
     battery_msg.cell_voltage.capacity = 1;
 
-    battery_msg.cell_temperature.size=N_BATTERY_CELLS;
+    //battery_msg.cell_temperature.size=N_BATTERY_CELLS;
+    /*
     if(battery_msg.cell_temperature.data == NULL){
         battery_msg.cell_temperature.data = (float*)malloc(N_BATTERY_CELLS * sizeof(float));
         for(int i = 0; i<N_BATTERY_CELLS; i++){
             battery_msg.cell_temperature.data[i] = nan("1");
         }
-    }
+    }*/
     if(rmw_uros_ping_agent(100, 3) != RMW_RET_OK){
         return(0);
     }
@@ -118,7 +119,7 @@ int setup_micro_ros(){
     error += RCSOFTCHECK(rclc_node_init_default(&node, "RoboGuard_Node", "RoboGuard", &support));
 
     // create publisher
-    error += RCSOFTCHECK(rclc_publisher_init_default(&thermistor_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),"thermistors"));
+    //error += RCSOFTCHECK(rclc_publisher_init_default(&thermistor_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),"thermistors"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&battery_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),"battery"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&humidity_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"humidity"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&ambiant_temp_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"ambiant_temp"));
@@ -150,14 +151,14 @@ int clean_micro_ros(){
     error += RCSOFTCHECK(rcl_node_fini(&node));
     error += RCSOFTCHECK(rclc_support_fini(&support));
 
-    error += RCSOFTCHECK(rcl_publisher_fini(&thermistor_pub, &node));
+    //error += RCSOFTCHECK(rcl_publisher_fini(&thermistor_pub, &node));
 
     return(!error);
 }
 
 int update_micro_ros(){
     //publishing is done in the timer interrupt
-    thermistor_msg.data.data = sensor_data.thermistors;
+    //thermistor_msg.data.data = sensor_data.thermistors;
     battery_msg.voltage = sensor_data.battery_voltage;
     battery_msg.current = sensor_data.battery_current;
     battery_msg.temperature = sensor_data.battery_temp;
