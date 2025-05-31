@@ -70,3 +70,7 @@ float bms_bq769x0::get_batterie_voltage()
     return (float)BMS.getBatteryVoltage()/1000;
 }
 
+void bms_bq769x0::shutdown()
+{
+    BMS.shutdown();
+}

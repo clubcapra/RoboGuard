@@ -112,13 +112,13 @@ class bq769x0 {
 	bool alertInterruptFlag = true;   // init with true to check and clear errors at start-up   
 	
     int numberOfCells;
-	int cellReadingVoltages[15];           // mV
-    int cellVoltages[MAX_NUMBER_OF_CELLS];          // mV
-    byte idCellMaxVoltage;
-    byte idCellMinVoltage;
-	long long batVoltage;                           // mV
-	long batCurrent;                                // mA
-	int temperatures[MAX_NUMBER_OF_THERMISTORS];    // °C/10
+	int cellReadingVoltages[15]={0};           // mV
+    int cellVoltages[MAX_NUMBER_OF_CELLS]={0};          // mV
+    byte idCellMaxVoltage=0;
+    byte idCellMinVoltage=0;
+	long long batVoltage=0;                           // mV
+	long batCurrent=0;                                // mA
+	int temperatures[MAX_NUMBER_OF_THERMISTORS]={0};    // °C/10
 
     // Current limits (mA)
     long maxChargeCurrent;
@@ -157,7 +157,7 @@ class bq769x0 {
 	void updateTemperatures(void);
     byte updateBalancingSwitches(void);
 	int readRegister(byte address);
-	void writeRegister(byte address, int data);
+	uint8_t writeRegister(byte address, int data);
 };
 
 #endif // BQ769X0_H

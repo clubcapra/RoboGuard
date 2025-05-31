@@ -17,6 +17,7 @@ class bms_bq769x0 : private bq769x0 {
         float get_voltages_cell(uint8_t cell_id);
         float get_batterie_voltage();
         float get_temperatures();
+        void shutdown();
     private: 
         bq769x0 BMS;
 
