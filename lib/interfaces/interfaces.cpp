@@ -20,7 +20,7 @@
 #define FAULT_AMBIANT_HUMIDITY 8
 
 #define BATT_MIN_V 38.4
-#define BATT_MAX_V 50.4
+#define BATT_MAX_V 51.4
 #define BATT_CELL_MIN_V 3.5
 #define BATT_CELL_MAX_V 4.2
 #define BATT_MAX_TEMP 80 // in degree C
@@ -127,6 +127,8 @@ void update_interfaces()
     // bme.performReading();
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
+
+    sensor_data.estop_status=digitalRead(estop_status_pin);
 
     uint8_t fault_code;
     
