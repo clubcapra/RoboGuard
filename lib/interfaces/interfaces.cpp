@@ -49,7 +49,8 @@ const int estop_pin = PA12;
 const int estop_status_pin = PA11;
 const int current_sensor_pin = PB1;
 
-int status_pwr_sup_mode = 0;
+int status_pwr_sup_mode = 1;
+bool status_voltage_BMS= true;
 
 // To compensate thermistors label mismatch between connector and adc channels
 // const uint8_t thermistor_map[N_THERMISTORS] = {3,2,1,0,7,6,5,4};
@@ -90,8 +91,24 @@ void setup_interfaces()
 
 void update_interfaces()
 {
-    
-    if (status_pwr_sup_mode != digitalRead(pwr_supply_mode_pin)&&(sensor_data.battery_voltage==0))
+    bms.update();
+
+    // sensor_data.battery_cell_voltage[0] = battery_calc_cell_v(analogRead(cell_pins[0]), 0);
+    for (int i = 1; i <= N_BATTERY_CELLS; i++)
+    {
+        sensor_data.battery_cell_voltage[i - 1] = bms.get_voltages_cell(i);
+    }
+
+    sensor_data.battery_voltage = bms.get_batterie_voltage();
+    sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage) / 100;
+
+    sensor_data.battery_temp = bms.get_temperatures();
+    if(sensor_data.battery_voltage==0)
+    {
+        status_voltage_BMS=false;
+    }
+
+    if ((status_pwr_sup_mode != digitalRead(pwr_supply_mode_pin)&& (!status_voltage_BMS)) || (!status_voltage_BMS))
     {
         status_pwr_sup_mode = digitalRead(pwr_supply_mode_pin);
         switch (status_pwr_sup_mode)
@@ -105,18 +122,7 @@ void update_interfaces()
             break;
         }
     }
-    bms.update();
-
-    // sensor_data.battery_cell_voltage[0] = battery_calc_cell_v(analogRead(cell_pins[0]), 0);
-    for (int i = 1; i <= N_BATTERY_CELLS; i++)
-    {
-        sensor_data.battery_cell_voltage[i - 1] = bms.get_voltages_cell(i);
-    }
-
-    sensor_data.battery_voltage = bms.get_batterie_voltage();
-    sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage) / 100;
-
-    sensor_data.battery_temp = bms.get_temperatures();
+    
     // sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
     // sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
 
@@ -128,11 +134,11 @@ void update_interfaces()
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
 
-    sensor_data.estop_status=digitalRead(estop_status_pin);
+    sensor_data.estop_status_boutons=digitalRead(estop_status_pin);
 
     uint8_t fault_code;
     
-    if ((status_pwr_sup_mode == 0) &&(sensor_data.battery_voltage==0))
+    if ((status_pwr_sup_mode == 0) &&(!status_voltage_BMS))
     {
         fault_code = 0;
     }
@@ -147,7 +153,11 @@ void update_interfaces()
         sensor_data.estop_pwr_out = 0;
     }
     // digitalWrite(estop_pin,1);
-    digitalWrite(estop_pin, (fault_code == 0) && !sensor_data.estop_pwr_out);
+
+    
+    sensor_data.estop_status_stm32=(fault_code == 0) && !sensor_data.estop_pwr_out;
+
+    digitalWrite(estop_pin, sensor_data.estop_status_stm32);
 }
 
 uint8_t check_estop()
@@ -188,7 +198,7 @@ uint8_t check_estop()
         if(sensor_data.thermistors[i] > MOTOR_MAX_TEMP) {
             return(FAULT_MOTOR_OVERTEMP);
         }
-    }
+    }*/
 
     if(sensor_data.ambiant_temp > AMBIANT_MAX_TEMP){
         return(FAULT_AMBIANT_OVERTEMP);
@@ -196,7 +206,7 @@ uint8_t check_estop()
 
     if(sensor_data.humidity > AMBIANT_MAX_HUM){
         return(FAULT_AMBIANT_HUMIDITY);
-    }*/
+    }
 
     return FAULT_NO_FAULT;
 }

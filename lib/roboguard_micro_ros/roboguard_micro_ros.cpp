@@ -17,11 +17,12 @@
 
 #define BATTERY_CAPACITY 6.5 //in Ah
 
-rcl_publisher_t /*thermistor_pub,*/ battery_pub, ambiant_temp_pub, humidity_pub,estop_pub;
+rcl_publisher_t /*thermistor_pub,*/ battery_pub, ambiant_temp_pub, humidity_pub,estop_bt_pub,estop_stm32_pub;
 //std_msgs__msg__Float32MultiArray thermistor_msg;
 sensor_msgs__msg__BatteryState battery_msg;
 
-std_msgs__msg__Bool estop_msg;
+std_msgs__msg__Bool estop_bt_msg;
+std_msgs__msg__Bool estop_stm32_msg;
 rcl_service_t estop_service;
 std_srvs__srv__SetBool_Response estop_res;
 std_srvs__srv__SetBool_Request estop_req;
@@ -62,7 +63,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
     if (timer != NULL) {
         //RCSOFTCHECK(rcl_publish(&thermistor_pub, &thermistor_msg, NULL));
         RCSOFTCHECK(rcl_publish(&battery_pub, &battery_msg, NULL));
-        RCSOFTCHECK(rcl_publish(&estop_pub, &estop_msg, NULL));
+        RCSOFTCHECK(rcl_publish(&estop_bt_pub, &estop_bt_msg, NULL));
+        RCSOFTCHECK(rcl_publish(&estop_stm32_pub, &estop_stm32_msg, NULL));
         RCSOFTCHECK(rcl_publish(&ambiant_temp_pub, &ambiant_temp_msg, NULL));
         RCSOFTCHECK(rcl_publish(&humidity_pub, &humidity_msg, NULL));
     }
@@ -124,7 +126,8 @@ int setup_micro_ros(){
     // create publisher
     //error += RCSOFTCHECK(rclc_publisher_init_default(&thermistor_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),"thermistors"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&battery_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),"battery"));
-    error += RCSOFTCHECK(rclc_publisher_init_default(&estop_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),"estop"));
+    error += RCSOFTCHECK(rclc_publisher_init_default(&estop_bt_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),"estop_bt"));
+    error += RCSOFTCHECK(rclc_publisher_init_default(&estop_stm32_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),"estop_stm32"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&humidity_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"humidity"));
     error += RCSOFTCHECK(rclc_publisher_init_default(&ambiant_temp_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"ambiant_temp"));
 
@@ -169,7 +172,8 @@ int update_micro_ros(){
     battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
     battery_msg.percentage = sensor_data.battery_percent;
 
-    estop_msg.data = sensor_data.estop_status;
+    estop_bt_msg.data = sensor_data.estop_status_boutons;
+    estop_stm32_msg.data = sensor_data.estop_status_stm32;
 
     humidity_msg.data = sensor_data.humidity;
     ambiant_temp_msg.data = sensor_data.ambiant_temp;

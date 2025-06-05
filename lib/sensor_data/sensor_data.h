@@ -15,7 +15,8 @@ typedef struct{
     float ambiant_temp;
     float humidity;
     uint8_t estop_pwr_out;
-    uint8_t estop_status;
+    bool estop_status_boutons;
+    bool estop_status_stm32;
 }sensor_data_t;
 
 extern sensor_data_t sensor_data;
