@@ -1,91 +1,126 @@
+/**
+ * @file interfaces.cpp
+ * @brief Implementation of sensor interfaces and system monitoring for RoboGuard
+ * @author Philippe Desbiens & Benoit Malenfant
+ * @date June 5, 2025
+ */
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
-#include "ADS7828.h"
 #include "bms_Bq769x0.h"
-// #include "bq769x0.h"
 
 #include "interfaces.h"
 #include "sensor_data.h"
 
-#define FAULT_NO_FAULT 0
-#define FAULT_BATT_UNDER_V 1
-#define FAULT_BATT_OVER_V 2
-#define FAULT_BATT_CELL_UNDER_V 3
-#define FAULT_BATT_CELL_OVER_V 4
-#define FAULT_BATT_OVER_CURR 5
-#define FAULT_BATT_OVER_TEMP 6
-#define FAULT_AMBIANT_OVERTEMP 7
-#define FAULT_AMBIANT_HUMIDITY 8
+/** @defgroup FaultCodes System Fault Code Definitions
+ *  @brief Error codes for system fault conditions
+ *  @{
+ */
+#define FAULT_NO_FAULT 0            /**< No fault condition */
+#define FAULT_BATT_UNDER_V 1        /**< Battery undervoltage */
+#define FAULT_BATT_OVER_V 2         /**< Battery overvoltage */
+#define FAULT_BATT_CELL_UNDER_V 3   /**< Cell undervoltage */
+#define FAULT_BATT_CELL_OVER_V 4    /**< Cell overvoltage */
+#define FAULT_BATT_OVER_CURR 5      /**< Battery overcurrent */
+#define FAULT_BATT_OVER_TEMP 6      /**< Battery overtemperature */
+#define FAULT_AMBIANT_OVERTEMP 7    /**< Ambient overtemperature */
+#define FAULT_AMBIANT_HUMIDITY 8    /**< Ambient humidity fault */
+/** @} */
 
-#define BATT_MIN_V 38.4
-#define BATT_MAX_V 51.4
-#define BATT_CELL_MIN_V 3.5
-#define BATT_CELL_MAX_V 4.2
-#define BATT_MAX_TEMP 80 // in degree C
-#define BATT_MIN_TEMP 10
-#define BATT_CELL_MIN_V_BMS 3500 // in mV
-#define BATT_CELL_MAX_V_BMS 4200 // in mV
+/** @defgroup SafetyLimits System Safety Limit Definitions
+ *  @brief Safety thresholds for battery and environmental monitoring
+ *  @{
+ */
+#define BATT_MIN_V 38.4             /**< Minimum battery pack voltage (V) */
+#define BATT_MAX_V 51.4             /**< Maximum battery pack voltage (V) */
+#define BATT_CELL_MIN_V 3.5         /**< Minimum cell voltage (V) */
+#define BATT_CELL_MAX_V 4.2         /**< Maximum cell voltage (V) */
+#define BATT_MAX_TEMP 80            /**< Maximum battery temperature (°C) */
+#define BATT_MIN_TEMP 10            /**< Minimum battery temperature (°C) */
+#define BATT_CELL_MIN_V_BMS 3500    /**< Minimum cell voltage for BMS (mV) */
+#define BATT_CELL_MAX_V_BMS 4200    /**< Maximum cell voltage for BMS (mV) */
 
-#define MOTOR_MAX_TEMP 80   // in degree c
-#define AMBIANT_MAX_TEMP 80 // in degree c
-#define AMBIANT_MAX_HUM 50  // in TBD
+#define MOTOR_MAX_TEMP 80           /**< Maximum motor temperature (°C) */
+#define AMBIANT_MAX_TEMP 80         /**< Maximum ambient temperature (°C) */
+#define AMBIANT_MAX_HUM 50          /**< Maximum ambient humidity (%) */
+/** @} */
 
-#define BME680_ADDRESS 0x77
-#define b2I2CAddress 0x08
-#define ADS7828_ADDRESS 72
-#define ADC_TO_CURRENT 0.122100122100122
+/** @defgroup I2CAddresses I2C Device Address Definitions
+ *  @brief I2C addresses for connected devices
+ *  @{
+ */
+#define BME680_ADDRESS 0x77         /**< BME680 environmental sensor address */
+#define b2I2CAddress 0x08           /**< BMS I2C address */
+#define ADS7828_ADDRESS 72          /**< External ADC address */
+/** @} */
 
-const int bat_therm_pin = PB0;
-// const int cell_pins[N_BATTERY_CELLS] = {PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PC0, PC1, PC2, PC3};
+/** @defgroup ConversionConstants Sensor Conversion Constants
+ *  @brief Constants for converting sensor readings to physical units
+ *  @{
+ */
+#define ADC_TO_CURRENT 0.122100122100122  /**< ADC to current conversion factor */
+/** @} */
 
-const int alert_BMS = PA15;
-const int boot_BMS = PC7;
+/** @defgroup PinDefinitions GPIO Pin Assignments
+ *  @brief Pin assignments for various system interfaces
+ *  @{
+ */
+const int bat_therm_pin = PB0;          /**< Battery thermistor ADC pin */
+const int alert_BMS = PA15;             /**< BMS alert pin */
+const int boot_BMS = PC7;               /**< BMS boot pin */
+const int pwr_supply_mode_pin = PA0;    /**< Power supply mode selection pin */
+const int estop_pin = PA12;             /**< Emergency stop output pin */
+const int estop_status_pin = PA11;      /**< Emergency stop status input pin */
+const int current_sensor_pin = PB1;     /**< Current sensor ADC pin */
+/** @} */
 
-const int pwr_supply_mode_pin = PA0;
+/** @defgroup GlobalVariables System State Variables
+ *  @brief Global variables tracking system state
+ *  @{
+ */
+int status_pwr_sup_mode = 1;            /**< Power supply mode status */
+bool status_voltage_BMS = true;         /**< BMS voltage status flag */
+/** @} */
 
-const int estop_pin = PA12;
-const int estop_status_pin = PA11;
-const int current_sensor_pin = PB1;
+/** @defgroup I2CInterfaces I2C Bus Instances
+ *  @brief I2C interface instances for different sensors
+ *  @{
+ */
+TwoWire wire1(PB7, PB6);               /**< I2C bus 1 for environmental sensor */
+TwoWire wire2(PC12, PB10);             /**< I2C bus 2 for BMS */
+/** @} */
 
-int status_pwr_sup_mode = 1;
-bool status_voltage_BMS= true;
-
-// To compensate thermistors label mismatch between connector and adc channels
-// const uint8_t thermistor_map[N_THERMISTORS] = {3,2,1,0,7,6,5,4};
-
-TwoWire wire1(PB7, PB6);
-TwoWire wire2(PC12, PB10);
-
-Adafruit_BME680 bme(&wire1);
-
-bms_bq769x0 bms(&wire2);
-// bq769x0 bms(&wire2,bq76940, b2I2CAddress);
+/** @defgroup SensorInstances Sensor Object Instances
+ *  @brief Instances of sensor objects
+ *  @{
+ */
+Adafruit_BME680 bme(&wire1);           /**< Environmental sensor instance */
+bms_bq769x0 bms(&wire2);               /**< Battery management system instance */
+/** @} */
 
 void setup_interfaces()
 {
+    // Configure GPIO pins
     pinMode(estop_pin, OUTPUT);
     pinMode(estop_status_pin, INPUT);
     pinMode(pwr_supply_mode_pin, INPUT);
-    //status_pwr_sup_mode = digitalRead(pwr_supply_mode_pin);
+    
+    // Initialize BMS with protection parameters
     bms.init_bq769x0(alert_BMS, boot_BMS, THERM_B, BATT_MIN_TEMP, BATT_MAX_TEMP, BATT_CELL_MIN_V_BMS, BATT_CELL_MAX_V_BMS);
 
+    // Initialize environmental sensor
     bme.begin(BME680_ADDRESS);
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
     bme.setPressureOversampling(BME680_OS_4X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(0, 150); // 320*C for 150 ms
-    // Setup ADC
+    bme.setGasHeater(0, 150); // 320°C for 150 ms
+    
+    // Configure ADC
     analogReadResolution(ADC_N_BITS);
-
     pinMode(bat_therm_pin, INPUT_ANALOG);
-
-    /*for(int i = 0; i < N_BATTERY_CELLS; i++){
-        pinMode(cell_pins[i], INPUT_ANALOG);
-    }*/
-
     pinMode(current_sensor_pin, INPUT_ANALOG);
 }
 
@@ -93,7 +128,7 @@ void update_interfaces()
 {
     bms.update();
 
-    // sensor_data.battery_cell_voltage[0] = battery_calc_cell_v(analogRead(cell_pins[0]), 0);
+    // Read individual cell voltages (BMS channels start at 1)
     for (int i = 1; i <= N_BATTERY_CELLS; i++)
     {
         sensor_data.battery_cell_voltage[i - 1] = bms.get_voltages_cell(i);
@@ -101,14 +136,16 @@ void update_interfaces()
 
     sensor_data.battery_voltage = bms.get_batterie_voltage();
     sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage) / 100;
-
     sensor_data.battery_temp = bms.get_temperatures();
-    if(sensor_data.battery_voltage==0)
+    
+    // Check BMS voltage status
+    if(sensor_data.battery_voltage == 0)
     {
-        status_voltage_BMS=false;
+        status_voltage_BMS = false;
     }
 
-    if ((status_pwr_sup_mode != digitalRead(pwr_supply_mode_pin)&& (!status_voltage_BMS)) || (!status_voltage_BMS))
+    // Handle power supply mode changes and BMS state
+    if ((status_pwr_sup_mode != digitalRead(pwr_supply_mode_pin) && (!status_voltage_BMS)) || (!status_voltage_BMS))
     {
         status_pwr_sup_mode = digitalRead(pwr_supply_mode_pin);
         switch (status_pwr_sup_mode)
@@ -123,22 +160,17 @@ void update_interfaces()
         }
     }
     
-    // sensor_data.battery_temp = thermistor_calc_temp(analogRead(bat_therm_pin));
-    // sensor_data.battery_current = calc_current(analogRead(current_sensor_pin));
-
-#ifndef USE_MICRO_ROS
-// Serial3.println(ext_adc.read(thermistor_map[0]));
-#endif
-
-    // bme.performReading();
+    // Read environmental data
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
 
-    sensor_data.estop_status_boutons=digitalRead(estop_status_pin);
+    // Read emergency stop button status
+    sensor_data.estop_status_boutons = digitalRead(estop_status_pin);
 
+    // Check for fault conditions
     uint8_t fault_code;
     
-    if ((status_pwr_sup_mode == 0) &&(!status_voltage_BMS))
+    if ((status_pwr_sup_mode == 0) && (!status_voltage_BMS))
     {
         fault_code = 0;
     }
@@ -147,21 +179,20 @@ void update_interfaces()
         fault_code = check_estop();
     }
     
-    // require a call to estop service to reset the fault
+    // Require a call to estop service to reset the fault
     if (fault_code)
     {
         sensor_data.estop_pwr_out = 0;
     }
-    // digitalWrite(estop_pin,1);
-
     
-    sensor_data.estop_status_stm32=(fault_code == 0) && !sensor_data.estop_pwr_out;
-
+    // Update system emergency stop status
+    sensor_data.estop_status_stm32 = (fault_code == 0) && !sensor_data.estop_pwr_out;
     digitalWrite(estop_pin, sensor_data.estop_status_stm32);
 }
 
 uint8_t check_estop()
 {
+    // Check battery pack voltage limits
     if (sensor_data.battery_voltage < BATT_MIN_V)
     {
         return (FAULT_BATT_UNDER_V);
@@ -172,6 +203,7 @@ uint8_t check_estop()
         return (FAULT_BATT_OVER_V);
     }
 
+    // Check individual cell voltages
     for (int i = 0; i < N_BATTERY_CELLS; i++)
     {
         if (sensor_data.battery_cell_voltage[i] < BATT_CELL_MIN_V)
@@ -188,18 +220,13 @@ uint8_t check_estop()
         }
     }
 
+    // Check battery temperature
     if (sensor_data.battery_temp > BATT_MAX_TEMP)
     {
         return (FAULT_BATT_OVER_TEMP);
     }
 
-    /*
-    for(int i = 0; i < N_THERMISTORS; i++){
-        if(sensor_data.thermistors[i] > MOTOR_MAX_TEMP) {
-            return(FAULT_MOTOR_OVERTEMP);
-        }
-    }*/
-
+    // Check environmental conditions
     if(sensor_data.ambiant_temp > AMBIANT_MAX_TEMP){
         return(FAULT_AMBIANT_OVERTEMP);
     }
@@ -213,26 +240,25 @@ uint8_t check_estop()
 
 float thermistor_calc_temp(int adc_reading)
 {
-    // Find thermistor resistance from rdivider equation
+    // Calculate thermistor resistance from voltage divider
     float resistance;
     resistance = THERM_PULL_UP / ((ADC_MAX_VALUE / adc_reading) - 1);
 
-    // Find thermistor temperature from steinart equation
+    // Apply Steinhart-Hart equation for temperature
     float temp;
     temp = (THERM_B * THERM_T0) / (THERM_B + THERM_T0 * log(resistance / THERM_R0));
-    // Degree K to degree C
-    temp -= 273.15;
+    temp -= 273.15; // Convert from Kelvin to Celsius
 
     return (temp);
 }
 
 double battery_calc_charge(double voltage)
 {
-    // calibration table meant for a 12s battery
+    // Calibration table for 12S battery pack
     int capacities[] = {100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0};
     double voltages[] = {50.4, 49.8, 49.32, 48.96, 48.24, 47.76, 47.4, 46.92, 46.44, 46.2, 46.08, 45.84, 45.6, 45.48, 45.24, 45, 44.76, 44.52, 44.28, 43.32, 39.24};
 
-    // Clip voltage within the range
+    // Clip voltage to table range
     if (voltage > voltages[0])
     {
         voltage = voltages[0];
@@ -242,7 +268,7 @@ double battery_calc_charge(double voltage)
         voltage = voltages[20];
     }
 
-    // Linear interpolation
+    // Find interpolation range
     int i;
     for (i = 0; i < 20; ++i)
     {
@@ -252,7 +278,7 @@ double battery_calc_charge(double voltage)
         }
     }
 
-    // Calculate charge percentage using linear interpolation
+    // Linear interpolation between table points
     double charge = capacities[i] + (capacities[i + 1] - capacities[i]) * (voltage - voltages[i]) / (voltages[i + 1] - voltages[i]);
 
     return charge;
@@ -260,7 +286,7 @@ double battery_calc_charge(double voltage)
 
 float calc_current(uint16_t adc_reading)
 {
-    // 6.6mv/A (+- 200A) centered at vcc/2
+    // 6.6mV/A (±200A) centered at VCC/2
     float return_value = (adc_reading - (ADC_MAX_VALUE / 2)) * ADC_TO_CURRENT;
     return (return_value);
 }
