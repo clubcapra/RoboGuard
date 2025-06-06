@@ -59,6 +59,8 @@ class bms_bq769x0 : private bq769x0 {
          * and update the BMS status.
          */
         void update();
+
+        int check_status();
         
         /**
          * @brief Get voltage of a specific cell

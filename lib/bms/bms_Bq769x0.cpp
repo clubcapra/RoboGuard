@@ -55,6 +55,11 @@ void bms_bq769x0::update()
     }*/
 }
 
+int bms_bq769x0::check_status()
+{
+    return BMS.checkStatus();
+}
+
 float bms_bq769x0::get_voltages_cell(uint8_t cell_id)
 {
     return (float)BMS.getCellVoltage(cell_id)/1000;
