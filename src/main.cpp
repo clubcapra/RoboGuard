@@ -18,6 +18,8 @@
 #include <Adafruit_BME680.h>
 #include "interfaces.h"
 
+// Note: Using Adafruit_BME680 library which supports both BME680 and BME688
+
 /** @defgroup SystemConfiguration System Configuration Constants
  *  @brief Main system configuration parameters
  *  @{
@@ -100,11 +102,11 @@ void setup() {
  */
 void loop() {
   // Update all sensor readings and system status
-  update_interfaces();
+  //update_interfaces();
   
   #ifdef USE_MICRO_ROS
   // Handle micro-ROS communication and callbacks
-  update_micro_ros();
+  //update_micro_ros();
   #else
   // Development loop placeholder
   // Place development/debug code here

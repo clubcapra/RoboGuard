@@ -53,7 +53,6 @@ typedef struct{
      *  @{
      */
     uint8_t estop_pwr_out;                          /**< Emergency stop power output control (0 = off, 1 = on) */
-    bool estop_status_boutons;                      /**< Physical emergency stop button status */
     bool estop_status_stm32;                        /**< STM32 emergency stop output status */
     /** @} */
 }sensor_data_t;

@@ -216,7 +216,6 @@ int update_micro_ros(){
     battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
     battery_msg.percentage = sensor_data.battery_percent;
 
-    estop_bt_msg.data = sensor_data.estop_status_boutons;
     estop_stm32_msg.data = sensor_data.estop_status_stm32;
 
     humidity_msg.data = sensor_data.humidity;

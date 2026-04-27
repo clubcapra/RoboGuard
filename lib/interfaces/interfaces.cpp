@@ -9,10 +9,11 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
-#include "bms_Bq769x0.h"
 
 #include "interfaces.h"
 #include "sensor_data.h"
+
+// Note: Using Adafruit_BME680 library which supports both BME680 and BME688
 
 /** @defgroup FaultCodes System Fault Code Definitions
  *  @brief Error codes for system fault conditions
@@ -51,7 +52,7 @@
  *  @brief I2C addresses for connected devices
  *  @{
  */
-#define BME680_ADDRESS 0x77 /**< BME680 environmental sensor address */
+#define BME688_ADDRESS 0x77 /**< BME688 environmental sensor address */
 #define b2I2CAddress 0x08   /**< BMS I2C address */
 #define ADS7828_ADDRESS 72  /**< External ADC address */
 /** @} */
@@ -68,9 +69,6 @@
  *  @{
  */
 const int bat_therm_pin = PB0;       /**< Battery thermistor ADC pin */
-const int alert_BMS = PA15;          /**< BMS alert pin */
-const int boot_BMS = PC7;            /**< BMS boot pin */
-const int pwr_supply_mode_pin = PA0; /**< Power supply mode selection pin */
 const int estop_pin = PA12;          /**< Emergency stop output pin */
 const int estop_status_pin = PA11;   /**< Emergency stop status input pin */
 const int current_sensor_pin = PB1;  /**< Current sensor ADC pin */
@@ -80,8 +78,7 @@ const int current_sensor_pin = PB1;  /**< Current sensor ADC pin */
  *  @brief Global variables tracking system state
  *  @{
  */
-int status_pwr_sup_mode = 1;    /**< Power supply mode status */
-bool status_voltage_BMS = true; /**< BMS voltage status flag */
+int status_pwr_sup_mode = 1; /**< Power supply mode status */
 /** @} */
 
 /** @defgroup I2CInterfaces I2C Bus Instances
@@ -89,29 +86,22 @@ bool status_voltage_BMS = true; /**< BMS voltage status flag */
  *  @{
  */
 TwoWire wire1(PB7, PB6);   /**< I2C bus 1 for environmental sensor */
-TwoWire wire2(PC12, PB10); /**< I2C bus 2 for BMS */
 /** @} */
 
 /** @defgroup SensorInstances Sensor Object Instances
  *  @brief Instances of sensor objects
  *  @{
  */
-Adafruit_BME680 bme(&wire1); /**< Environmental sensor instance */
-bms_bq769x0 bms(&wire2);     /**< Battery management system instance */
+Adafruit_BME680 bme(&wire1); /**< Environmental sensor instance (BME688) */
 /** @} */
 
 void setup_interfaces()
 {
     // Configure GPIO pins
     pinMode(estop_pin, OUTPUT);
-    pinMode(estop_status_pin, INPUT);
-    pinMode(pwr_supply_mode_pin, INPUT);
 
-    // Initialize BMS with protection parameters
-    bms.init_bq769x0(alert_BMS, boot_BMS, THERM_B, BATT_MIN_TEMP, BATT_MAX_TEMP, BATT_CELL_MIN_V_BMS, BATT_CELL_MAX_V_BMS);
-
-    // Initialize environmental sensor
-    bme.begin(BME680_ADDRESS);
+    // Initialize BME688 environmental sensor
+    bme.begin(BME688_ADDRESS);
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
     bme.setPressureOversampling(BME680_OS_4X);
@@ -122,71 +112,23 @@ void setup_interfaces()
     analogReadResolution(ADC_N_BITS);
     pinMode(bat_therm_pin, INPUT_ANALOG);
     pinMode(current_sensor_pin, INPUT_ANALOG);
-    bms.update();
-    if (bms.get_batterie_voltage() == 0)
-    {
-        status_voltage_BMS = false;
-    }
 
 }
 
 void update_interfaces()
 {
-    bms.update();
-    
+    // Read battery thermistor temperature
+    int bat_therm_adc = analogRead(bat_therm_pin);
+    sensor_data.battery_temp = thermistor_calc_temp(bat_therm_adc);
 
-    // Read individual cell voltages (BMS channels start at 1)
-    for (int i = 1; i <= N_BATTERY_CELLS; i++)
-    {
-        sensor_data.battery_cell_voltage[i - 1] = bms.get_voltages_cell(i);
-    }
-
-    sensor_data.battery_voltage = bms.get_batterie_voltage();
-    sensor_data.battery_percent = battery_calc_charge(sensor_data.battery_voltage) / 100;
-    sensor_data.battery_temp = bms.get_temperatures();
-
-    // Check BMS voltage status
-    // INUTILE A CORRIGER NE LIT PAS CAR PAS INIT
-    if ((sensor_data.battery_voltage > 0) && (!status_voltage_BMS))
-    {
-        status_voltage_BMS = true;
-        bms.init_bq769x0(alert_BMS, boot_BMS, THERM_B, BATT_MIN_TEMP, BATT_MAX_TEMP, BATT_CELL_MIN_V_BMS, BATT_CELL_MAX_V_BMS);
-    }
-
-    // Handle power supply mode changes and BMS state
-    // A VERIFIER
-    if ((status_pwr_sup_mode != digitalRead(pwr_supply_mode_pin) && (!status_voltage_BMS)) || (!status_voltage_BMS))
-    {
-        status_pwr_sup_mode = digitalRead(pwr_supply_mode_pin);
-        if(status_pwr_sup_mode==0 || (!status_voltage_BMS))
-        {
-            bms.shutdown();
-        }
-        else
-        {
-            bms.init_bq769x0(alert_BMS, boot_BMS, THERM_B, BATT_MIN_TEMP, BATT_MAX_TEMP, BATT_CELL_MIN_V_BMS, BATT_CELL_MAX_V_BMS);
-        }
-        
-    }
 
     // Read environmental data
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
 
-    // Read emergency stop button status
-    sensor_data.estop_status_boutons = digitalRead(estop_status_pin);
 
     // Check for fault conditions
-    uint8_t fault_code;
-
-    if ((status_pwr_sup_mode == 0) && (!status_voltage_BMS))
-    {
-        fault_code = 0;
-    }
-    else
-    {
-        fault_code = check_estop();
-    }
+    uint8_t fault_code = check_estop();
 
     // Require a call to estop service to reset the fault
     if (fault_code)
@@ -201,6 +143,7 @@ void update_interfaces()
 
 uint8_t check_estop()
 {
+    /*
     // Check battery pack voltage limits
     if (sensor_data.battery_voltage < BATT_MIN_V)
     {
@@ -228,13 +171,13 @@ uint8_t check_estop()
             return (FAULT_BATT_CELL_OVER_V);
         }
     }
-
+    
     // Check battery temperature
     if (sensor_data.battery_temp > BATT_MAX_TEMP)
     {
         return (FAULT_BATT_OVER_TEMP);
     }
-
+    */
     // Check environmental conditions
     if (sensor_data.ambiant_temp > AMBIANT_MAX_TEMP)
     {
