@@ -86,7 +86,7 @@ int status_pwr_sup_mode = 1; /**< Power supply mode status */
  */
 TwoWire wire1(PB7, PB6);   /**< I2C bus 1 for environmental sensor */
 
-HardwareSerial uart1_bms(PA9,PA10);
+HardwareSerial uart1_bms(PA10,PA9);
 
 static jbd::Api g_bms(uart1_bms);
 
@@ -129,11 +129,21 @@ void setup_interfaces()
 
 void update_interfaces()
 {
-
-    g_bms.read_basic_info(bms_info);
-    g_bms.read_cell_info(cells_info);
-
-    translate_BMS_data(&sensor_data,bms_info,cells_info);
+    bool state_bms= false; 
+    
+    state_bms = g_bms.read_basic_info(bms_info);
+    state_bms = g_bms.read_cell_info(cells_info);
+    if(state_bms)
+    {
+        translate_BMS_data(&sensor_data,bms_info,cells_info);
+        sensor_data.present=true;
+    }
+    else
+    {
+        sensor_data.present=false;
+    }
+    
+    
 
     // Read battery thermistor temperature
     int bat_therm_adc = analogRead(bat_therm_pin);
@@ -276,7 +286,7 @@ void translate_BMS_data(sensor_data_t *data, jbd::BasicInfo &bms, jbd::CellInfo 
     }
     
     data->bms_temp=bms.temperatures_c[0];
-    for(uint8_t i=1; i<N_THERMISTORS-1;i++)
+    for(uint8_t i=1; i<N_THERMISTORS;i++)
     {
         data->battery_temp[i-1]=bms.temperatures_c[i];
     }

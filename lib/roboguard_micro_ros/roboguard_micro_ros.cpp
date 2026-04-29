@@ -146,7 +146,7 @@ int setup_micro_ros(){
     battery_msg.design_capacity = BATTERY_CAPACITY;
     battery_msg.charge = nan("1");
     battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LIPO;
-    battery_msg.present = 1;
+    battery_msg.present = 0;
     battery_msg.power_supply_health = 0;
     battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
     battery_msg.cell_voltage.size = N_BATTERY_CELLS;
@@ -214,6 +214,7 @@ int clean_micro_ros(){
 
 int update_micro_ros(){
     // Update message data with current sensor readings
+    battery_msg.present = sensor_data.present;
     battery_msg.voltage = sensor_data.battery_voltage;
     battery_msg.current = sensor_data.battery_current;
     battery_msg.temperature = sensor_data.bms_temp;

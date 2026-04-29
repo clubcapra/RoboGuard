@@ -16,7 +16,7 @@
  *  @{
  */
 #define N_THERMISTORS 3         /**< Number of thermistor sensors in the system */
-#define THERMISTORS_ANAL 3         /**< Number of thermistor sensors in the system */
+#define THERMISTORS_ANAL 2         /**< Number of thermistor sensors in the system */
 #define N_BATTERY_CELLS 12      /**< Number of battery cells to monitor (12S configuration) */
 /** @} */
 
@@ -40,6 +40,7 @@ typedef struct{
     float battery_voltage;                          /**< Total battery pack voltage in volts */
     float battery_current;                          /**< Battery current in amperes (+ = charging, - = discharging) */
     float battery_capacity;
+    bool present;
 
     /** @} */
     
