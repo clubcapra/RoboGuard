@@ -9,9 +9,13 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
+#include "jbd_bms_api.h"
 
 #include "interfaces.h"
 #include "sensor_data.h"
+
+
+static const uint32_t kBmsBaud = 9600;
 
 // Note: Using Adafruit_BME680 library which supports both BME680 and BME688
 
@@ -57,21 +61,16 @@
 #define ADS7828_ADDRESS 72  /**< External ADC address */
 /** @} */
 
-/** @defgroup ConversionConstants Sensor Conversion Constants
- *  @brief Constants for converting sensor readings to physical units
- *  @{
- */
-#define ADC_TO_CURRENT 0.122100122100122 /**< ADC to current conversion factor */
+
 /** @} */
 
 /** @defgroup PinDefinitions GPIO Pin Assignments
  *  @brief Pin assignments for various system interfaces
  *  @{
  */
-const int bat_therm_pin = PB0;       /**< Battery thermistor ADC pin */
+const int bat_therm_pin = PC0;       /**< Battery thermistor ADC pin */
 const int estop_pin = PA12;          /**< Emergency stop output pin */
 const int estop_status_pin = PA11;   /**< Emergency stop status input pin */
-const int current_sensor_pin = PB1;  /**< Current sensor ADC pin */
 /** @} */
 
 /** @defgroup GlobalVariables System State Variables
@@ -86,6 +85,14 @@ int status_pwr_sup_mode = 1; /**< Power supply mode status */
  *  @{
  */
 TwoWire wire1(PB7, PB6);   /**< I2C bus 1 for environmental sensor */
+
+HardwareSerial uart1_bms(PA9,PA10);
+
+static jbd::Api g_bms(uart1_bms);
+
+jbd::BasicInfo bms_info;
+jbd::CellInfo cells_info;
+
 /** @} */
 
 /** @defgroup SensorInstances Sensor Object Instances
@@ -95,10 +102,17 @@ TwoWire wire1(PB7, PB6);   /**< I2C bus 1 for environmental sensor */
 Adafruit_BME680 bme(&wire1); /**< Environmental sensor instance (BME688) */
 /** @} */
 
+
+
+void translate_BMS_data(sensor_data_t *data, jbd::BasicInfo &bms, jbd::CellInfo &cells);
+
 void setup_interfaces()
 {
     // Configure GPIO pins
     pinMode(estop_pin, OUTPUT);
+
+    g_bms.begin(kBmsBaud);
+    
 
     // Initialize BME688 environmental sensor
     bme.begin(BME688_ADDRESS);
@@ -111,21 +125,25 @@ void setup_interfaces()
     // Configure ADC
     analogReadResolution(ADC_N_BITS);
     pinMode(bat_therm_pin, INPUT_ANALOG);
-    pinMode(current_sensor_pin, INPUT_ANALOG);
-
 }
 
 void update_interfaces()
 {
+
+    g_bms.read_basic_info(bms_info);
+    g_bms.read_cell_info(cells_info);
+
+    translate_BMS_data(&sensor_data,bms_info,cells_info);
+
     // Read battery thermistor temperature
     int bat_therm_adc = analogRead(bat_therm_pin);
-    sensor_data.battery_temp = thermistor_calc_temp(bat_therm_adc);
+    sensor_data.battery_temp[THERMISTORS_ANAL] = thermistor_calc_temp(bat_therm_adc);
 
 
     // Read environmental data
     sensor_data.ambiant_temp = bme.readTemperature();
     sensor_data.humidity = bme.readHumidity();
-
+    
 
     // Check for fault conditions
     uint8_t fault_code = check_estop();
@@ -238,12 +256,6 @@ double battery_calc_charge(double voltage)
     return charge;
 }
 
-float calc_current(uint16_t adc_reading)
-{
-    // 6.6mV/A (±200A) centered at VCC/2
-    float return_value = (adc_reading - (ADC_MAX_VALUE / 2)) * ADC_TO_CURRENT;
-    return (return_value);
-}
 
 float lowpass_filter(float previous, float input, float tau, float dt)
 {
@@ -251,3 +263,24 @@ float lowpass_filter(float previous, float input, float tau, float dt)
     float output = alpha * input + (1 - alpha) * previous;
     return output;
 }
+
+
+
+void translate_BMS_data(sensor_data_t *data, jbd::BasicInfo &bms, jbd::CellInfo &cells)
+{
+    data->battery_current= bms.current;
+    data->battery_voltage= bms.total_voltage;
+    for(uint8_t i=0; i<cells.cell_count;i++)
+    {
+        data->battery_cell_voltage[i]=cells.cell_v[i];
+    }
+    
+    data->bms_temp=bms.temperatures_c[0];
+    for(uint8_t i=1; i<N_THERMISTORS-1;i++)
+    {
+        data->battery_temp[i-1]=bms.temperatures_c[i];
+    }
+    data->battery_capacity=bms.nominal_capacity_ah;
+    
+}
+
