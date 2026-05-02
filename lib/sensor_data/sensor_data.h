@@ -15,7 +15,8 @@
  *  @brief Configuration constants for sensor array sizes
  *  @{
  */
-#define N_THERMISTORS 1         /**< Number of thermistor sensors in the system */
+#define N_THERMISTORS 3         /**< Number of thermistor sensors in the system */
+#define THERMISTORS_ANAL 2         /**< Number of thermistor sensors in the system */
 #define N_BATTERY_CELLS 12      /**< Number of battery cells to monitor (12S configuration) */
 /** @} */
 
@@ -34,10 +35,13 @@ typedef struct{
      *  @{
      */
     float battery_cell_voltage[N_BATTERY_CELLS];    /**< Individual cell voltages in volts */
-    float battery_temp;                             /**< Battery temperature in degrees Celsius */
+    float bms_temp;
+    float battery_temp[N_THERMISTORS];              /**< Battery temperature in degrees Celsius */
     float battery_voltage;                          /**< Total battery pack voltage in volts */
     float battery_current;                          /**< Battery current in amperes (+ = charging, - = discharging) */
-    float battery_percent;                          /**< Battery charge percentage (0.0 to 1.0) */
+    float battery_capacity;
+    bool present;
+
     /** @} */
     
     /** @defgroup EnvironmentalData Environmental Monitoring Data
@@ -53,7 +57,6 @@ typedef struct{
      *  @{
      */
     uint8_t estop_pwr_out;                          /**< Emergency stop power output control (0 = off, 1 = on) */
-    bool estop_status_boutons;                      /**< Physical emergency stop button status */
     bool estop_status_stm32;                        /**< STM32 emergency stop output status */
     /** @} */
 }sensor_data_t;

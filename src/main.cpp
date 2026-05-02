@@ -18,6 +18,8 @@
 #include <Adafruit_BME680.h>
 #include "interfaces.h"
 
+// Note: Using Adafruit_BME680 library which supports both BME680 and BME688
+
 /** @defgroup SystemConfiguration System Configuration Constants
  *  @brief Main system configuration parameters
  *  @{
