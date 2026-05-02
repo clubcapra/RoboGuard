@@ -1,0 +1,15 @@
+# Nanopb options for roboguard.proto
+# Defines maximum counts for repeated fields so nanopb can allocate arrays.
+
+# Max total message size (adjust if needed)
+Telemetry:
+  max_size: 200
+
+# Repeated field sizes (match sensor_data.h)
+Telemetry.battery_cell_voltage:
+  max_count: 12
+
+Telemetry.battery_cell_temperature:
+  max_count: 3
+
+# You can also tune individual field max sizes if required.

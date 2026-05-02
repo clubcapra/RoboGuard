@@ -1,0 +1,27 @@
+syntax = "proto3";
+package roboguard;
+
+// Telemetry message carries the same fields previously published via micro-ROS.
+message Telemetry {
+  float battery_capacity = 1;                  // FIELD_BATTERY_CAPACITY
+  float battery_design_capacity = 2;           // FIELD_BATTERY_DESIGN_CAPACITY
+  float battery_charge = 3;                    // FIELD_BATTERY_CHARGE
+  uint32 battery_power_supply_technology = 4;  // FIELD_BATTERY_POWER_SUPPLY_TECHNOLOGY
+  bool battery_present = 5;                    // FIELD_BATTERY_PRESENT
+  uint32 battery_power_supply_health = 6;      // FIELD_BATTERY_POWER_SUPPLY_HEALTH
+  repeated float battery_cell_voltage = 7;     // FIELD_BATTERY_CELL_VOLTAGE
+  repeated float battery_cell_temperature = 8; // FIELD_BATTERY_CELL_TEMPERATURE
+  float battery_percentage = 9;                // FIELD_BATTERY_PERCENTAGE
+  float battery_voltage = 10;                  // FIELD_BATTERY_VOLTAGE
+  float battery_current = 11;                  // FIELD_BATTERY_CURRENT
+  float battery_temperature = 12;              // FIELD_BATTERY_TEMPERATURE
+  bool estop_bt = 13;                          // FIELD_ESTOP_BT
+  bool estop_stm32 = 14;                       // FIELD_ESTOP_STM32
+  float ambiant_temp = 15;                     // FIELD_AMBIANT_TEMP
+  float humidity = 16;                         // FIELD_HUMIDITY
+}
+
+// Command message used to request emergency stop power changes.
+message EstopCommand {
+  bool estop_power_out = 1;                    // CMD_FIELD_ESTOP_POWER_OUT
+}
