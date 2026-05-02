@@ -1,22 +1,14 @@
 /**
  * @file roboguard_micro_ros.cpp
- * @brief Implementation of micro-ROS communication interface for RoboGuard
+ * @brief Implementation of Nanopb communication interface for RoboGuard
  * @author Philippe Desbiens & Benoit Malenfant
  * @date June 5, 2025
  */
 
 #include <Arduino.h>
-#include <micro_ros_platformio.h>
-
-#include <rcl/rcl.h>
-#include <rclc/rclc.h>
-#include <rclc/executor.h>
-
-#include <std_msgs/msg/float32_multi_array.h>
-#include <std_msgs/msg/float32.h>
-#include <std_srvs/srv/set_bool.h>
-#include <std_msgs/msg/bool.h>
-#include <sensor_msgs/msg/battery_state.h>
+#include <pb_decode.h>
+#include <pb_encode.h>
+#include <string.h>
 
 #include "roboguard_micro_ros.h"
 #include "sensor_data.h"
@@ -29,62 +21,61 @@
 /** @} */
 
 /** @defgroup TimingConstants Communication Timing Constants
- *  @brief Timing configuration for ROS communication
+ *  @brief Timing configuration for Nanopb communication
  *  @{
  */
 #define TIMER_TIMEOUT_MS 66         /**< Publisher timer timeout in milliseconds */
-#define EXECUTOR_TIMEOUT_MS 100     /**< Executor spin timeout in milliseconds */
-#define PING_TIMEOUT_MS 100         /**< Agent ping timeout in milliseconds */
-#define PING_ATTEMPTS 3             /**< Number of ping attempts to agent */
+#define SERIAL_BAUDRATE 115200      /**< Nanopb serial link baudrate */
 /** @} */
 
-/** @defgroup ErrorHandling Error Handling Macros
- *  @brief Macros for ROS error checking
+/** @defgroup ProtobufWireTypes Nanopb Protobuf Wire Types
+ *  @brief Wire type constants used for manual protobuf encoding
  *  @{
  */
-#define RCSOFTCHECK(fn) (fn != RCL_RET_OK)  /**< Soft check for ROS function return codes */
+#define PB_WT_VARINT ((pb_wire_type_t)0)
+#define PB_WT_64BIT ((pb_wire_type_t)1)
+#define PB_WT_STRING ((pb_wire_type_t)2)
+#define PB_WT_32BIT ((pb_wire_type_t)5)
 /** @} */
 
-/** @defgroup ROSPublishers ROS Publisher Instances
- *  @brief Publisher objects for sensor data
+/** @defgroup FrameProtocol Framed Serial Protocol
+ *  @brief Simple framing constants for protobuf payload transport
  *  @{
  */
-rcl_publisher_t battery_pub;            /**< Battery state publisher */
-rcl_publisher_t ambiant_temp_pub;       /**< Ambient temperature publisher */
-rcl_publisher_t humidity_pub;           /**< Humidity publisher */
-rcl_publisher_t estop_bt_pub;           /**< Emergency stop button publisher */
-rcl_publisher_t estop_stm32_pub;        /**< STM32 emergency stop status publisher */
+#define FRAME_SYNC_A 0xAA
+#define FRAME_SYNC_B 0x55
+#define FRAME_MAX_PAYLOAD 220
+#define FRAME_TYPE_TELEMETRY 0x01
+#define FRAME_TYPE_ESTOP_COMMAND 0x02
 /** @} */
 
-/** @defgroup ROSMessages ROS Message Instances
- *  @brief Message objects for data publication
+/** @defgroup MessageFields Telemetry Protobuf Field IDs
+ *  @brief Field numbers for telemetry payload (stable on-wire schema)
  *  @{
  */
-sensor_msgs__msg__BatteryState battery_msg;     /**< Battery state message */
-std_msgs__msg__Bool estop_bt_msg;               /**< Emergency stop button message */
-std_msgs__msg__Bool estop_stm32_msg;            /**< STM32 emergency stop message */
-std_msgs__msg__Float32 ambiant_temp_msg;        /**< Ambient temperature message */
-std_msgs__msg__Float32 humidity_msg;            /**< Humidity message */
+#define FIELD_BATTERY_CAPACITY 1
+#define FIELD_BATTERY_DESIGN_CAPACITY 2
+#define FIELD_BATTERY_CHARGE 3
+#define FIELD_BATTERY_POWER_SUPPLY_TECHNOLOGY 4
+#define FIELD_BATTERY_PRESENT 5
+#define FIELD_BATTERY_POWER_SUPPLY_HEALTH 6
+#define FIELD_BATTERY_CELL_VOLTAGE 7
+#define FIELD_BATTERY_CELL_TEMPERATURE 8
+#define FIELD_BATTERY_PERCENTAGE 9
+#define FIELD_BATTERY_VOLTAGE 10
+#define FIELD_BATTERY_CURRENT 11
+#define FIELD_BATTERY_TEMPERATURE 12
+#define FIELD_ESTOP_BT 13
+#define FIELD_ESTOP_STM32 14
+#define FIELD_AMBIANT_TEMP 15
+#define FIELD_HUMIDITY 16
 /** @} */
 
-/** @defgroup ROSServices ROS Service Instances
- *  @brief Service objects for remote control
+/** @defgroup CommandFields Command Protobuf Field IDs
+ *  @brief Field numbers for incoming command payload
  *  @{
  */
-rcl_service_t estop_service;                    /**< Emergency stop service */
-std_srvs__srv__SetBool_Response estop_res;      /**< Emergency stop service response */
-std_srvs__srv__SetBool_Request estop_req;       /**< Emergency stop service request */
-/** @} */
-
-/** @defgroup ROSCore ROS Core Infrastructure
- *  @brief Core ROS objects for communication
- *  @{
- */
-rclc_executor_t executor;           /**< ROS executor for callbacks */
-rclc_support_t support;             /**< ROS support object */
-rcl_allocator_t allocator;          /**< Memory allocator */
-rcl_node_t node;                    /**< ROS node */
-rcl_timer_t pub_timer;              /**< Publisher timer */
+#define CMD_FIELD_ESTOP_POWER_OUT 1
 /** @} */
 
 /** @defgroup GlobalVariables Global State Variables
@@ -92,151 +83,281 @@ rcl_timer_t pub_timer;              /**< Publisher timer */
  *  @{
  */
 const int estop_pin = PA12;         /**< Emergency stop output pin */
-int alive = 0;                      /**< ROS connection status flag */
-HardwareSerial Serial3(USART3);    /**< Serial interface for micro-ROS */
+int alive = 0;                      /**< Communication status flag */
+HardwareSerial Serial3(USART3);     /**< Serial interface for Nanopb transport */
+static uint32_t last_publish_ms = 0;
 /** @} */
 
 /**
- * @brief Emergency stop service callback
- * 
- * Handles incoming emergency stop service requests from ROS.
- * Immediately applies emergency stop if power-off is requested.
+ * @brief Frame parser state for incoming serial data
  */
-void estop_callback(const void * request_msg, void * response_msg){
-    std_srvs__srv__SetBool_Request * req_in = (std_srvs__srv__SetBool_Request *) request_msg;
-    std_srvs__srv__SetBool_Response * res_in = (std_srvs__srv__SetBool_Response *) response_msg;
-    
-    sensor_data.estop_pwr_out = req_in->data;
-    
-    // If asked to turn off power, DO IT NOW
-    if(!req_in->data){
-        digitalWrite(estop_pin, req_in->data);
+typedef enum {
+    PARSER_WAIT_SYNC_A = 0,
+    PARSER_WAIT_SYNC_B,
+    PARSER_READ_TYPE,
+    PARSER_READ_LEN_L,
+    PARSER_READ_LEN_H,
+    PARSER_READ_PAYLOAD,
+    PARSER_READ_CHECKSUM
+} parser_state_t;
+
+static parser_state_t parser_state = PARSER_WAIT_SYNC_A;
+static uint8_t rx_type = 0;
+static uint16_t rx_length = 0;
+static uint16_t rx_offset = 0;
+static uint8_t rx_checksum = 0;
+static uint8_t rx_payload[FRAME_MAX_PAYLOAD];
+
+static bool pb_write_key(pb_ostream_t *stream, uint32_t field_number, pb_wire_type_t wire_type) {
+    return pb_encode_tag(stream, wire_type, field_number);
+}
+
+static bool pb_write_float(pb_ostream_t *stream, uint32_t field_number, float value) {
+    uint32_t packed = 0;
+    memcpy(&packed, &value, sizeof(packed));
+    return pb_write_key(stream, field_number, PB_WT_32BIT) && pb_encode_fixed32(stream, &packed);
+}
+
+static bool pb_write_bool(pb_ostream_t *stream, uint32_t field_number, bool value) {
+    return pb_write_key(stream, field_number, PB_WT_VARINT) && pb_encode_varint(stream, value ? 1U : 0U);
+}
+
+static bool pb_write_uint(pb_ostream_t *stream, uint32_t field_number, uint32_t value) {
+    return pb_write_key(stream, field_number, PB_WT_VARINT) && pb_encode_varint(stream, value);
+}
+
+static uint8_t compute_checksum(uint8_t type, uint16_t length, const uint8_t *payload) {
+    uint8_t checksum = type;
+    checksum ^= (uint8_t)(length & 0xFF);
+    checksum ^= (uint8_t)((length >> 8) & 0xFF);
+    for (uint16_t i = 0; i < length; i++) {
+        checksum ^= payload[i];
+    }
+    return checksum;
+}
+
+static bool encode_telemetry_payload(uint8_t *buffer, size_t buffer_size, size_t *out_size) {
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
+    const float unknown_value = nan("1");
+
+    if (!pb_write_float(&stream, FIELD_BATTERY_CAPACITY, sensor_data.battery_capacity)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_BATTERY_DESIGN_CAPACITY, BATTERY_CAPACITY)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_BATTERY_CHARGE, unknown_value)) {
+        return false;
+    }
+    if (!pb_write_uint(&stream, FIELD_BATTERY_POWER_SUPPLY_TECHNOLOGY, 3U)) {
+        return false;
+    }
+    if (!pb_write_bool(&stream, FIELD_BATTERY_PRESENT, sensor_data.present)) {
+        return false;
+    }
+    if (!pb_write_uint(&stream, FIELD_BATTERY_POWER_SUPPLY_HEALTH, 0U)) {
+        return false;
+    }
+    for (uint8_t i = 0; i < N_BATTERY_CELLS; i++) {
+        if (!pb_write_float(&stream, FIELD_BATTERY_CELL_VOLTAGE, sensor_data.battery_cell_voltage[i])) {
+            return false;
+        }
+    }
+    for (uint8_t i = 0; i < N_THERMISTORS; i++) {
+        if (!pb_write_float(&stream, FIELD_BATTERY_CELL_TEMPERATURE, sensor_data.battery_temp[i])) {
+            return false;
+        }
+    }
+    if (!pb_write_float(&stream, FIELD_BATTERY_PERCENTAGE, unknown_value)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_BATTERY_VOLTAGE, sensor_data.battery_voltage)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_BATTERY_CURRENT, sensor_data.battery_current)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_BATTERY_TEMPERATURE, sensor_data.bms_temp)) {
+        return false;
+    }
+    if (!pb_write_bool(&stream, FIELD_ESTOP_BT, false)) {
+        return false;
+    }
+    if (!pb_write_bool(&stream, FIELD_ESTOP_STM32, sensor_data.estop_status_stm32)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_AMBIANT_TEMP, sensor_data.ambiant_temp)) {
+        return false;
+    }
+    if (!pb_write_float(&stream, FIELD_HUMIDITY, sensor_data.humidity)) {
+        return false;
     }
 
-    res_in->success = true;
+    *out_size = stream.bytes_written;
+    return true;
 }
 
 /**
- * @brief Timer callback for periodic data publishing
- * 
- * Publishes all sensor data at regular intervals defined by timer configuration.
+ * @brief Decode incoming estop command payload
+ *
+ * Expects protobuf payload with boolean field #1.
  */
-void timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
-    RCLC_UNUSED(last_call_time);
-    if (timer != NULL) {
-        RCSOFTCHECK(rcl_publish(&battery_pub, &battery_msg, NULL));
-        RCSOFTCHECK(rcl_publish(&estop_bt_pub, &estop_bt_msg, NULL));
-        RCSOFTCHECK(rcl_publish(&estop_stm32_pub, &estop_stm32_msg, NULL));
-        RCSOFTCHECK(rcl_publish(&ambiant_temp_pub, &ambiant_temp_msg, NULL));
-        RCSOFTCHECK(rcl_publish(&humidity_pub, &humidity_msg, NULL));
+static bool decode_estop_command(const uint8_t *payload, size_t payload_size, bool *estop_pwr_out) {
+    pb_istream_t stream = pb_istream_from_buffer(payload, payload_size);
+    bool eof = false;
+    bool has_estop_field = false;
+    pb_wire_type_t wire_type = PB_WT_VARINT;
+    uint32_t tag = 0;
+
+    while (pb_decode_tag(&stream, &wire_type, &tag, &eof)) {
+        if (tag == CMD_FIELD_ESTOP_POWER_OUT && wire_type == PB_WT_VARINT) {
+            uint64_t value = 0;
+            if (!pb_decode_varint(&stream, &value)) {
+                return false;
+            }
+            *estop_pwr_out = value ? true : false;
+            has_estop_field = true;
+        } else if (!pb_skip_field(&stream, wire_type)) {
+            return false;
+        }
     }
+
+    return eof && has_estop_field;
+}
+
+static void handle_estop_command(const uint8_t *payload, size_t payload_size) {
+    bool request_estop_power = false;
+    if (!decode_estop_command(payload, payload_size, &request_estop_power)) {
+        return;
+    }
+
+    sensor_data.estop_pwr_out = request_estop_power ? 1 : 0;
+    if (!request_estop_power) {
+        digitalWrite(estop_pin, LOW);
+    }
+}
+
+static void process_rx_byte(uint8_t byte_in) {
+    switch (parser_state) {
+        case PARSER_WAIT_SYNC_A:
+            parser_state = (byte_in == FRAME_SYNC_A) ? PARSER_WAIT_SYNC_B : PARSER_WAIT_SYNC_A;
+            break;
+        case PARSER_WAIT_SYNC_B:
+            parser_state = (byte_in == FRAME_SYNC_B) ? PARSER_READ_TYPE : PARSER_WAIT_SYNC_A;
+            break;
+        case PARSER_READ_TYPE:
+            rx_type = byte_in;
+            rx_checksum = byte_in;
+            parser_state = PARSER_READ_LEN_L;
+            break;
+        case PARSER_READ_LEN_L:
+            rx_length = byte_in;
+            rx_checksum ^= byte_in;
+            parser_state = PARSER_READ_LEN_H;
+            break;
+        case PARSER_READ_LEN_H:
+            rx_length |= ((uint16_t)byte_in << 8);
+            rx_checksum ^= byte_in;
+            if (rx_length > FRAME_MAX_PAYLOAD) {
+                parser_state = PARSER_WAIT_SYNC_A;
+                break;
+            }
+            rx_offset = 0;
+            parser_state = (rx_length == 0) ? PARSER_READ_CHECKSUM : PARSER_READ_PAYLOAD;
+            break;
+        case PARSER_READ_PAYLOAD:
+            rx_payload[rx_offset++] = byte_in;
+            rx_checksum ^= byte_in;
+            if (rx_offset >= rx_length) {
+                parser_state = PARSER_READ_CHECKSUM;
+            }
+            break;
+        case PARSER_READ_CHECKSUM:
+            if (rx_checksum == byte_in && rx_type == FRAME_TYPE_ESTOP_COMMAND) {
+                handle_estop_command(rx_payload, rx_length);
+            }
+            parser_state = PARSER_WAIT_SYNC_A;
+            break;
+        default:
+            parser_state = PARSER_WAIT_SYNC_A;
+            break;
+    }
+}
+
+static void process_incoming_frames() {
+    while (Serial3.available() > 0) {
+        process_rx_byte((uint8_t)Serial3.read());
+    }
+}
+
+static bool send_frame(uint8_t type, const uint8_t *payload, uint16_t payload_length) {
+    if (payload_length > FRAME_MAX_PAYLOAD) {
+        return false;
+    }
+
+    const uint8_t checksum = compute_checksum(type, payload_length, payload);
+    const size_t expected_size = (size_t)payload_length + 6U;
+    size_t written = 0;
+
+    written += Serial3.write(FRAME_SYNC_A);
+    written += Serial3.write(FRAME_SYNC_B);
+    written += Serial3.write(type);
+    written += Serial3.write((uint8_t)(payload_length & 0xFF));
+    written += Serial3.write((uint8_t)((payload_length >> 8) & 0xFF));
+    if (payload_length > 0) {
+        written += Serial3.write(payload, payload_length);
+    }
+    written += Serial3.write(checksum);
+
+    return written == expected_size;
+}
+
+static bool publish_telemetry() {
+    uint8_t payload[FRAME_MAX_PAYLOAD];
+    size_t payload_size = 0;
+    if (!encode_telemetry_payload(payload, sizeof(payload), &payload_size)) {
+        return false;
+    }
+    return send_frame(FRAME_TYPE_TELEMETRY, payload, (uint16_t)payload_size);
 }
 
 int setup_micro_ros(){
-    int error = 0;
-
     // Configure serial transport
     Serial3.setRx(PC11);
     Serial3.setTx(PC10);
-    Serial3.begin(115200);
-    set_microros_serial_transports(Serial3);
+    Serial3.begin(SERIAL_BAUDRATE);
 
-    // Initialize battery message structure
-    battery_msg.capacity = sensor_data.battery_capacity;
-    battery_msg.design_capacity = BATTERY_CAPACITY;
-    battery_msg.charge = nan("1");
-    battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LIPO;
-    battery_msg.present = 0;
-    battery_msg.power_supply_health = 0;
-    battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
-    battery_msg.cell_voltage.size = N_BATTERY_CELLS;
-    battery_msg.cell_voltage.capacity = 1;
-    battery_msg.cell_temperature.data = sensor_data.battery_temp;
-    battery_msg.cell_temperature.size = N_THERMISTORS;
-    battery_msg.cell_temperature.capacity = 1;
-    battery_msg.percentage= nan("1");
+    parser_state = PARSER_WAIT_SYNC_A;
+    rx_type = 0;
+    rx_length = 0;
+    rx_offset = 0;
+    rx_checksum = 0;
+    last_publish_ms = millis();
 
-    // Check agent connectivity
-    if(rmw_uros_ping_agent(PING_TIMEOUT_MS, PING_ATTEMPTS) != RMW_RET_OK){
-        return(0);
-    }
-    
-    allocator = rcl_get_default_allocator();
-
-    // Create init options with domain ID
-    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-    error += RCSOFTCHECK(rcl_init_options_init(&init_options, allocator));
-    error += RCSOFTCHECK(rcl_init_options_set_domain_id(&init_options, ROS_DOMAIN_ID));
-
-    // Initialize rclc support object with custom options
-    error += RCSOFTCHECK(rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator));
-
-    // Create node
-    error += RCSOFTCHECK(rclc_node_init_default(&node, "RoboGuard_Node", "RoboGuard", &support));
-
-    // Create publishers
-    error += RCSOFTCHECK(rclc_publisher_init_default(&battery_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),"battery"));
-    error += RCSOFTCHECK(rclc_publisher_init_default(&estop_bt_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),"estop_bt"));
-    error += RCSOFTCHECK(rclc_publisher_init_default(&estop_stm32_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),"estop_stm32"));
-    error += RCSOFTCHECK(rclc_publisher_init_default(&humidity_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"humidity"));
-    error += RCSOFTCHECK(rclc_publisher_init_default(&ambiant_temp_pub,&node,ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),"ambiant_temp"));
-
-    // Create timer
-    error += RCSOFTCHECK(rclc_timer_init_default(&pub_timer,&support,RCL_MS_TO_NS(TIMER_TIMEOUT_MS),timer_callback));
-
-    // Create executor (allows 2 entities: timer + service)
-    error += RCSOFTCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
-    error += RCSOFTCHECK(rclc_executor_add_timer(&executor, &pub_timer));
-
-    // Setup emergency stop service
-    error += RCSOFTCHECK(rclc_service_init_default(&estop_service, &node, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), "set_estop"));
-    error += RCSOFTCHECK(rclc_executor_add_service(&executor, &estop_service, &estop_req, &estop_res, estop_callback));
-
-    alive = !error;
-    return(alive);
+    alive = 1;
+    return alive;
 }
 
 int clean_micro_ros(){
-    int error = 0;
-    
-    // Set context destroy timeout to immediate
-    rmw_context_t* rmw_context = rcl_context_get_rmw_context(&support.context);
-    (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
-
-    // Clean up ROS entities in reverse order
-    error += RCSOFTCHECK(rcl_timer_fini(&pub_timer));
-    error += RCSOFTCHECK(rclc_executor_fini(&executor));
-    error += RCSOFTCHECK(rcl_node_fini(&node));
-    error += RCSOFTCHECK(rclc_support_fini(&support));
-
-    return(!error);
+    Serial3.end();
+    alive = 0;
+    return 1;
 }
 
 int update_micro_ros(){
-    // Update message data with current sensor readings
-    battery_msg.present = sensor_data.present;
-    battery_msg.voltage = sensor_data.battery_voltage;
-    battery_msg.current = sensor_data.battery_current;
-    battery_msg.temperature = sensor_data.bms_temp;
-    battery_msg.cell_voltage.data = sensor_data.battery_cell_voltage;
-    battery_msg.cell_temperature.data=sensor_data.battery_temp;
-
-    estop_stm32_msg.data = sensor_data.estop_status_stm32;
-
-    humidity_msg.data = sensor_data.humidity;
-    ambiant_temp_msg.data = sensor_data.ambiant_temp;
-
-    // Process callbacks and publish data
-    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(EXECUTOR_TIMEOUT_MS));
-    
-    // Handle connection recovery
-    if(!alive){
-        alive = setup_micro_ros();
+    if (!alive) {
+        return 0;
     }
-    else if(rmw_uros_ping_agent(PING_TIMEOUT_MS, PING_ATTEMPTS) != RMW_RET_OK){
-        alive = 0;
-        clean_micro_ros();
+
+    process_incoming_frames();
+
+    if ((uint32_t)(millis() - last_publish_ms) >= TIMER_TIMEOUT_MS) {
+        if (!publish_telemetry()) {
+            alive = 0;
+            return 0;
+        }
+        last_publish_ms = millis();
     }
-    
-    return(alive);
+
+    return alive;
 }

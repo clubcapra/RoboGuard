@@ -1,6 +1,6 @@
 /**
  * @file roboguard_micro_ros.h
- * @brief Micro-ROS interface for RoboGuard system communication
+ * @brief Nanopb interface for RoboGuard system communication
  * @author Philippe Desbiens & Benoit Malenfant
  * @date June 5, 2025
  * @version 1.0
@@ -10,39 +10,41 @@
 #define ROBOGUARD_MICRO_ROS_H
 
 /** @defgroup ROSConfiguration ROS Configuration Constants
- *  @brief Configuration constants for ROS communication
+ *  @brief Legacy communication constants kept for compatibility
  *  @{
  */
 #define ROS_DOMAIN_ID 96            /**< ROS domain ID for network isolation */
 /** @} */
 
 /**
- * @brief Initialize micro-ROS communication system
+ * @brief Initialize Nanopb communication system
  * 
- * Sets up serial transport, initializes ROS node, creates publishers,
- * services, and executor for RoboGuard sensor data communication.
+ * Keeps legacy function name for backward compatibility.
+ * Sets up serial transport and internal state used for framed
+ * protobuf telemetry and command handling.
  * 
  * @return 1 if successful, 0 if initialization failed
  */
 int setup_micro_ros();
 
 /**
- * @brief Clean up micro-ROS resources
+ * @brief Clean up Nanopb communication resources
  * 
- * Properly destroys all ROS entities, timers, executors, and nodes
- * to free allocated memory and close connections.
+ * Keeps legacy function name for backward compatibility.
+ * Properly closes communication resources.
  * 
  * @return 1 if cleanup successful, 0 if errors occurred
  */
 int clean_micro_ros();
 
 /**
- * @brief Update micro-ROS communication
+ * @brief Update Nanopb communication
  * 
- * Updates message data with current sensor readings, handles service
- * callbacks, and manages connection health with ROS agent.
+ * Keeps legacy function name for backward compatibility.
+ * Updates telemetry payload with current sensor readings and handles
+ * incoming emergency stop commands.
  * 
- * @return 1 if communication active, 0 if connection lost
+ * @return 1 if communication active, 0 if connection inactive
  */
 int update_micro_ros();
 
