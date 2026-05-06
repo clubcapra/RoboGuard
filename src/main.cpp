@@ -17,6 +17,9 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 #include "interfaces.h"
+#ifndef USE_MICRO_ROS
+#include "pdu_i2c_api.h"
+#endif
 
 // Note: Using Adafruit_BME680 library which supports both BME680 and BME688
 
@@ -46,8 +49,14 @@ sensor_data_t sensor_data;          /**< Global sensor data structure instance *
 #ifndef USE_MICRO_ROS
 HardwareSerial Serial3(USART3);    /**< Serial3 for debug/development communication */
 #endif
-HardwareSerial Serial1(USART1);    /**< Serial1 for general purpose communication */
+HardwareSerial Serial1(USART6);    /**< Serial1 for general purpose communication */
 /** @} */
+
+#ifndef USE_MICRO_ROS
+roboguard::pdu::Client pdu_client(Wire,0x31);
+bool pdu_test_started = false;
+uint32_t pdu_last_test_ms = 0;
+#endif
 
 /**
  * @brief System initialization function
@@ -77,10 +86,15 @@ void setup() {
   setup_micro_ros();
   #else
   // Initialize serial interfaces for development/debug
-  Serial1.setRx(PA10);
-  Serial1.setTx(PA9);
+  Serial1.setRx(PC7);
+  Serial1.setTx(PC6);
   Serial1.begin(9600);
   Serial1.println("Initializing...");
+
+  Wire.setSCL(PB10);
+  Wire.setSDA(PC12);
+  pdu_client.begin(100000);
+  pdu_test_started = true;
   
   Serial3.setRx(PC11);
   Serial3.setTx(PC10);
@@ -108,8 +122,47 @@ void loop() {
   // Handle micro-ROS communication and callbacks
   update_micro_ros();
   #else
-  // Development loop placeholder
-  // Place development/debug code here
+  if (pdu_test_started && (millis() - pdu_last_test_ms) >= 2000) {
+    pdu_last_test_ms = millis();
+
+    roboguard::pdu::ApiInfo info{};
+    roboguard::pdu::ApiCommandResult command_result{};
+    bool info_ok = pdu_client.readInfo(info);
+    bool noop_ok = pdu_client.noop();
+    bool status_ok = pdu_client.waitForCommandResult(command_result, 250, 5);
+
+    Serial1.print("PDU info: ");
+    Serial1.println(info_ok ? "OK" : "FAIL");
+    if (info_ok) {
+      Serial1.print("  magic=");
+      Serial1.write(reinterpret_cast<const uint8_t *>(info.magic), 4);
+      Serial1.print(" proto=");
+      Serial1.print(info.protocol_major);
+      Serial1.print('.');
+      Serial1.print(info.protocol_minor);
+      Serial1.print(" fw=");
+      Serial1.print(info.fw_major);
+      Serial1.print('.');
+      Serial1.print(info.fw_minor);
+      Serial1.print('.');
+      Serial1.println(info.fw_patch);
+    }
+
+    Serial1.print("PDU noop: ");
+    Serial1.println(noop_ok ? "sent" : "send_fail");
+    Serial1.print("PDU status: ");
+    Serial1.println(status_ok ? "OK" : "WAIT_FAIL");
+    if (status_ok) {
+      Serial1.print("  seq=");
+      Serial1.print(command_result.sequence);
+      Serial1.print(" busy=");
+      Serial1.print(command_result.busy);
+      Serial1.print(" status=");
+      Serial1.print(command_result.status);
+      Serial1.print(" cmd=0x");
+      Serial1.println(command_result.command, HEX);
+    }
+  }
   #endif
  
   // Reset watchdog timer to prevent system reset
