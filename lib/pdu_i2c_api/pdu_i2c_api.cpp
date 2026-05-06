@@ -18,7 +18,7 @@ bool Client::begin(uint32_t clock_hz) {
 bool Client::selectRegister(uint8_t reg) {
   wire_.beginTransmission(address_);
   wire_.write(reg);
-  return wire_.endTransmission() == 0;
+  return wire_.endTransmission(false) == 0;
 }
 
 bool Client::writeRegister(uint8_t reg, const void *payload, size_t length) {
@@ -27,7 +27,7 @@ bool Client::writeRegister(uint8_t reg, const void *payload, size_t length) {
   if (length != 0 && payload != nullptr) {
     wire_.write(static_cast<const uint8_t *>(payload), length);
   }
-  return wire_.endTransmission() == 0;
+  return wire_.endTransmission(false) == 0;
 }
 
 bool Client::readRegister(uint8_t reg, void *payload, size_t length) {
