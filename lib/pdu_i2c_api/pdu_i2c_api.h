@@ -268,6 +268,7 @@ inline uint8_t signedPercentToByte(int8_t value) {
 class Client {
  public:
   explicit Client(TwoWire &wire = Wire, uint8_t address = kPduI2cAddress);
+  Client(uint32_t scl_pin, uint32_t sda_pin, uint8_t address = kPduI2cAddress);
 
   void setAddress(uint8_t address);
   uint8_t address() const;
@@ -313,10 +314,31 @@ class Client {
   bool setWinchLock(uint8_t lock_channel, bool enabled);
 
  private:
-  TwoWire &wire_;
+  TwoWire *wire_;
   uint8_t address_;
+  bool use_software_i2c_;
+  uint32_t scl_pin_;
+  uint32_t sda_pin_;
+  uint16_t half_period_us_;
 
   bool selectRegister(uint8_t reg);
+  bool hardwareSelectRegister(uint8_t reg);
+  bool hardwareWriteRegister(uint8_t reg, const void *payload, size_t length);
+  bool hardwareReadRegister(uint8_t reg, void *payload, size_t length);
+
+  void releaseScl();
+  void driveSclLow();
+  void releaseSda();
+  void driveSdaLow();
+  bool readSda() const;
+  void softDelay() const;
+  bool waitForSclHigh() const;
+  void softStart();
+  void softStop();
+  bool softWriteByte(uint8_t value);
+  uint8_t softReadByte(bool ack);
+  bool softwareWriteRegister(uint8_t reg, const void *payload, size_t length);
+  bool softwareReadRegister(uint8_t reg, void *payload, size_t length);
 };
 
 }  // namespace pdu

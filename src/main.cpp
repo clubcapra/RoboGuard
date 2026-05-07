@@ -53,9 +53,160 @@ HardwareSerial Serial1(USART6);    /**< Serial1 for general purpose communicatio
 /** @} */
 
 #ifndef USE_MICRO_ROS
-roboguard::pdu::Client pdu_client(Wire,0x31);
+roboguard::pdu::Client pdu_client(PB10, PC12, 0x31);
 bool pdu_test_started = false;
 uint32_t pdu_last_test_ms = 0;
+uint8_t pdu_test_step = 0;
+uint32_t pdu_cycle_count = 0;
+
+/**
+ * @brief Print an ApiCommandResult in human-readable form.
+ */
+static void print_pdu_command_result(bool got_status,
+                                     const roboguard::pdu::ApiCommandResult &r) {
+  if (!got_status) {
+    Serial1.println(" -> WAIT_TIMEOUT");
+    return;
+  }
+  Serial1.print(" -> seq=");
+  Serial1.print(r.sequence);
+  Serial1.print(" rc=");
+  Serial1.print(r.status);
+  Serial1.print(" cmd=0x");
+  if (r.command < 0x10U) Serial1.print('0');
+  Serial1.print(r.command, HEX);
+  Serial1.print(" arg0=");
+  Serial1.print(r.arg0);
+  Serial1.print(" arg1=");
+  Serial1.println(r.arg1);
+}
+
+/**
+ * @brief Send one command from the rotating test list and read its result.
+ *        Each call advances pdu_test_step, so the bus is exercised across many
+ *        different API codepaths over a few seconds.
+ */
+static void send_and_check_step(uint8_t step) {
+  using namespace roboguard::pdu;
+
+  const char *name = "?";
+  bool sent = false;
+
+  switch (step) {
+    case 0:
+      name = "noop";
+      sent = pdu_client.noop();
+      break;
+    case 1:
+      name = "setLedDuty(BRAS,25%)";
+      sent = pdu_client.setLedDuty(kLedBras, 25);
+      break;
+    case 2:
+      name = "setLedDuty(AVANT,50%)";
+      sent = pdu_client.setLedDuty(kLedAvant, 50);
+      break;
+    case 3:
+      name = "setLedDuty(ARRIERE,75%)";
+      sent = pdu_client.setLedDuty(kLedArriere, 75);
+      break;
+    case 4:
+      name = "setLedDuty(EXTRA,100%)";
+      sent = pdu_client.setLedDuty(kLedExtra, 100);
+      break;
+    case 5:
+      name = "setAllLeds(40%)";
+      sent = pdu_client.setAllLeds(40);
+      break;
+    case 6:
+      name = "setLedPattern(SOLID)";
+      sent = pdu_client.setLedPattern(kLedPatternSolid);
+      break;
+    case 7:
+      name = "setLedPattern(HEARTBEAT)";
+      sent = pdu_client.setLedPattern(kLedPatternHeartbeat);
+      break;
+    case 8:
+      name = "setEstopVtx(false)";
+      sent = pdu_client.setEstopVtx(false);
+      break;
+    case 9:
+      name = "clearFaultLog";
+      sent = pdu_client.clearFaultLog();
+      break;
+    default:
+      name = "noop(reset)";
+      sent = pdu_client.noop();
+      break;
+  }
+
+  Serial1.print("[T");
+  Serial1.print(pdu_cycle_count);
+  Serial1.print('.');
+  Serial1.print(step);
+  Serial1.print("] ");
+  Serial1.print(name);
+  if (!sent) {
+    Serial1.println(" SEND_FAIL");
+    return;
+  }
+
+  roboguard::pdu::ApiCommandResult result{};
+  const bool got_status = pdu_client.waitForCommandResult(result, 250, 5);
+  print_pdu_command_result(got_status, result);
+}
+
+static constexpr uint8_t kPduTestStepCount = 10;
+
+/**
+ * @brief One full PDU test cycle: read identification then advance one step
+ *        through the command rotation.  Called every ~1 s from loop().
+ */
+static void run_pdu_test_cycle() {
+  using namespace roboguard::pdu;
+
+  pdu_last_test_ms = millis();
+
+  // 1) Always read /info first so we immediately spot a dead bus.
+  ApiInfo info{};
+  const bool info_ok = pdu_client.readInfo(info);
+
+  Serial1.print("[INFO] ");
+  Serial1.print(info_ok ? "OK" : "FAIL");
+  if (info_ok) {
+    Serial1.print(" magic=");
+    Serial1.write(reinterpret_cast<const uint8_t *>(info.magic), 4);
+    Serial1.print(" proto=");
+    Serial1.print(info.protocol_major);
+    Serial1.print('.');
+    Serial1.print(info.protocol_minor);
+    Serial1.print(" fw=");
+    Serial1.print(info.fw_major);
+    Serial1.print('.');
+    Serial1.print(info.fw_minor);
+    Serial1.print('.');
+    Serial1.print(info.fw_patch);
+    Serial1.print(" addr=0x");
+    Serial1.print(info.i2c_addr, HEX);
+    Serial1.print(" rails=");
+    Serial1.print(info.rail_count);
+  }
+  Serial1.println();
+
+  if (!info_ok) {
+    Serial1.println("[ABORT] readInfo failed - skipping commands this cycle");
+    return;
+  }
+
+  // 2) Run the next command in the rotation.
+  send_and_check_step(pdu_test_step);
+
+  // 3) Advance and bookkeep.
+  pdu_test_step = static_cast<uint8_t>((pdu_test_step + 1U) % kPduTestStepCount);
+  if (pdu_test_step == 0U) {
+    ++pdu_cycle_count;
+    Serial1.println("--- end of test cycle ---");
+  }
+}
 #endif
 
 /**
@@ -91,9 +242,7 @@ void setup() {
   Serial1.begin(9600);
   Serial1.println("Initializing...");
 
-  Wire.setSCL(PB10);
-  Wire.setSDA(PC12);
-  pdu_client.begin(100000);
+  pdu_client.begin(50000);
   pdu_test_started = true;
   
   Serial3.setRx(PC11);
@@ -122,46 +271,8 @@ void loop() {
   // Handle micro-ROS communication and callbacks
   update_micro_ros();
   #else
-  if (pdu_test_started && (millis() - pdu_last_test_ms) >= 2000) {
-    pdu_last_test_ms = millis();
-
-    roboguard::pdu::ApiInfo info{};
-    roboguard::pdu::ApiCommandResult command_result{};
-    bool info_ok = pdu_client.readInfo(info);
-    bool noop_ok = pdu_client.noop();
-    bool status_ok = pdu_client.waitForCommandResult(command_result, 250, 5);
-
-    Serial1.print("PDU info: ");
-    Serial1.println(info_ok ? "OK" : "FAIL");
-    if (info_ok) {
-      Serial1.print("  magic=");
-      Serial1.write(reinterpret_cast<const uint8_t *>(info.magic), 4);
-      Serial1.print(" proto=");
-      Serial1.print(info.protocol_major);
-      Serial1.print('.');
-      Serial1.print(info.protocol_minor);
-      Serial1.print(" fw=");
-      Serial1.print(info.fw_major);
-      Serial1.print('.');
-      Serial1.print(info.fw_minor);
-      Serial1.print('.');
-      Serial1.println(info.fw_patch);
-    }
-
-    Serial1.print("PDU noop: ");
-    Serial1.println(noop_ok ? "sent" : "send_fail");
-    Serial1.print("PDU status: ");
-    Serial1.println(status_ok ? "OK" : "WAIT_FAIL");
-    if (status_ok) {
-      Serial1.print("  seq=");
-      Serial1.print(command_result.sequence);
-      Serial1.print(" busy=");
-      Serial1.print(command_result.busy);
-      Serial1.print(" status=");
-      Serial1.print(command_result.status);
-      Serial1.print(" cmd=0x");
-      Serial1.println(command_result.command, HEX);
-    }
+  if (pdu_test_started && (millis() - pdu_last_test_ms) >= 1000) {
+    run_pdu_test_cycle();
   }
   #endif
  
