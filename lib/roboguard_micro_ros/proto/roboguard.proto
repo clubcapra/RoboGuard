@@ -25,3 +25,244 @@ message Telemetry {
 message EstopCommand {
   bool estop_power_out = 1;                    // CMD_FIELD_ESTOP_POWER_OUT
 }
+
+enum PduRegister {
+  PDU_REGISTER_INFO = 0;
+  PDU_REGISTER_TELEMETRY_ALL = 16;
+  PDU_REGISTER_COMMAND = 32;
+  PDU_REGISTER_COMMAND_STATUS = 33;
+  PDU_REGISTER_PMBUS_BRIDGE = 64;
+  PDU_REGISTER_PMBUS_RESULT = 65;
+}
+
+enum PduStatusCode {
+  PDU_STATUS_OK = 0;
+  PDU_STATUS_BUS_ERROR = 1;
+  PDU_STATUS_TIMEOUT = 2;
+  PDU_STATUS_PARAM = 3;
+  PDU_STATUS_NOT_PRESENT = 4;
+  PDU_STATUS_RANGE = 5;
+  PDU_STATUS_PEC_MISMATCH = 6;
+  PDU_STATUS_FAULT = 7;
+  PDU_STATUS_NOT_INIT = 8;
+  PDU_STATUS_INTERNAL = 9;
+}
+
+enum PduRailId {
+  PDU_RAIL_48V = 0;
+  PDU_RAIL_24V = 1;
+  PDU_RAIL_12V = 2;
+  PDU_RAIL_ALL = 3;
+}
+
+enum PduLedChannel {
+  PDU_LED_BRAS = 0;
+  PDU_LED_AVANT = 1;
+  PDU_LED_ARRIERE = 2;
+  PDU_LED_EXTRA = 3;
+}
+
+enum PduLedPattern {
+  PDU_LED_PATTERN_OFF = 0;
+  PDU_LED_PATTERN_SOLID = 1;
+  PDU_LED_PATTERN_HEARTBEAT = 2;
+  PDU_LED_PATTERN_FAULT_BLINK = 3;
+  PDU_LED_PATTERN_ESTOP_STROBE = 4;
+}
+
+enum PduWinchMode {
+  PDU_WINCH_SLEEP = 0;
+  PDU_WINCH_DUAL_DC = 1;
+  PDU_WINCH_STEPPER = 2;
+  PDU_WINCH_PARALLEL_DC = 3;
+}
+
+enum PduWinchMotor {
+  PDU_WINCH_MOTOR_A = 0;
+  PDU_WINCH_MOTOR_B = 1;
+}
+
+enum PduWinchLockChannel {
+  PDU_WINCH_LOCK_1 = 0;
+  PDU_WINCH_LOCK_2 = 1;
+  PDU_WINCH_LOCK_ALL = 2;
+}
+
+enum PduSupervisorMode {
+  PDU_SUPERVISOR_BOOT = 0;
+  PDU_SUPERVISOR_PBIT = 1;
+  PDU_SUPERVISOR_NOMINAL = 2;
+  PDU_SUPERVISOR_DEGRADED = 3;
+  PDU_SUPERVISOR_FAULT = 4;
+  PDU_SUPERVISOR_ESTOP = 5;
+}
+
+enum PduRailState {
+  PDU_RAIL_STATE_BOOT = 0;
+  PDU_RAIL_STATE_ABSENT = 1;
+  PDU_RAIL_STATE_READY = 2;
+  PDU_RAIL_STATE_RUNNING = 3;
+  PDU_RAIL_STATE_WARNING = 4;
+  PDU_RAIL_STATE_TRIPPED = 5;
+  PDU_RAIL_STATE_LATCHED = 6;
+}
+
+enum PduCommandCode {
+  PDU_CMD_NOOP = 0;
+  PDU_CMD_SET_RAIL_ENABLE = 1;
+  PDU_CMD_SET_LED_DUTY = 2;
+  PDU_CMD_SET_ALL_LEDS = 3;
+  PDU_CMD_SET_LED_PATTERN = 4;
+  PDU_CMD_SET_ESTOP_LOCAL = 5;
+  PDU_CMD_SET_ESTOP_VTX = 6;
+  PDU_CMD_CLEAR_RAIL_LATCH = 7;
+  PDU_CMD_CLEAR_FAULT_LOG = 8;
+  PDU_CMD_RESET_DEVICE = 9;
+  PDU_CMD_SET_UNIX_TIME = 10;
+  PDU_CMD_REFRESH_HOTSWAP_BLACKBOX = 11;
+  PDU_CMD_ERASE_HOTSWAP_BLACKBOX = 12;
+  PDU_CMD_SET_WINCH_MODE = 48;
+  PDU_CMD_SET_WINCH_DC_MOTOR = 49;
+  PDU_CMD_SET_WINCH_PARALLEL_DC = 50;
+  PDU_CMD_SET_WINCH_STEPPER_PHASES = 51;
+  PDU_CMD_BRAKE_WINCH = 52;
+  PDU_CMD_CLEAR_WINCH_FAULT = 53;
+  PDU_CMD_SET_WINCH_LOCK = 54;
+}
+
+message PduInfo {
+  bytes magic = 1;
+  uint32 protocol_major = 2;
+  uint32 protocol_minor = 3;
+  uint32 fw_major = 4;
+  uint32 fw_minor = 5;
+  uint32 fw_patch = 6;
+  uint32 i2c_addr = 7;
+  uint32 rail_count = 8;
+}
+
+message PduCommandFrame {
+  PduCommandCode command = 1;
+  uint32 arg0 = 2;
+  uint32 arg1 = 3;
+  uint32 arg2 = 4;
+  uint32 arg3 = 5;
+}
+
+message PduCommandResult {
+  uint32 sequence = 1;
+  bool busy = 2;
+  PduStatusCode status = 3;
+  PduCommandCode command = 4;
+  uint32 arg0 = 5;
+  uint32 arg1 = 6;
+}
+
+message PduPmbusBridgeRequest {
+  PduRailId rail_id = 1;
+  uint32 op = 2;
+  uint32 command = 3;
+  bytes data = 4;
+}
+
+message PduPmbusBridgeResult {
+  uint32 sequence = 1;
+  bool busy = 2;
+  PduStatusCode status = 3;
+  PduRailId rail_id = 4;
+  uint32 op = 5;
+  uint32 command = 6;
+  bytes data = 7;
+}
+
+message PduWinchTelemetry {
+  PduWinchMode mode = 1;
+  bool awake = 2;
+  bool fault_active = 3;
+  bool lock1_on = 4;
+  bool lock2_on = 5;
+  int32 motor_a_cmd_pct = 6;
+  int32 motor_b_cmd_pct = 7;
+  int32 parallel_cmd_pct = 8;
+  int32 stepper_a_cmd_pct = 9;
+  int32 stepper_b_cmd_pct = 10;
+}
+
+message PduRailTelemetry {
+  PduRailId rail_id = 1;
+  PduRailState state = 2;
+  bool present = 3;
+  bool output_on = 4;
+  bool pgood = 5;
+  uint32 status_word = 6;
+  uint32 diag_word = 7;
+  uint32 status_mfr_specific2 = 8;
+  uint32 fault_count = 9;
+  uint32 wd_plb_timer = 10;
+  uint32 vin_mV = 11;
+  uint32 vout_mV = 12;
+  uint32 vaux_mV = 13;
+  uint32 iin_mA = 14;
+  uint32 pin_dW = 15;
+  bool peak_valid = 16;
+  uint32 peak_vin_mV = 17;
+  uint32 peak_iin_mA = 18;
+  uint32 peak_pin_dW = 19;
+  int32 die_temp_centiC = 20;
+  int32 ntc_temp_centiC = 21;
+  bool bb_valid = 22;
+  uint32 bb_config = 23;
+  uint32 bb_timer = 24;
+  uint32 bb_ram_len = 25;
+  uint32 bb_eeprom_len = 26;
+  bool bb_ram_event = 27;
+  bool bb_ram_timer_expired = 28;
+  uint32 bb_ram_tick = 29;
+  bool bb_eeprom_event = 30;
+  bool bb_eeprom_timer_expired = 31;
+  uint32 bb_eeprom_tick = 32;
+  bytes bb_ram = 33;
+  bytes bb_eeprom = 34;
+}
+
+message PduFaultRecord {
+  bool valid = 1;
+  uint32 code = 2;
+  PduRailId rail = 3;
+  uint32 sequence = 4;
+  uint32 status_word = 5;
+  uint32 diag_word = 6;
+  uint32 reset_count = 7;
+  uint32 uptime_ms = 8;
+  uint32 unix_time_s = 9;
+  uint32 reset_flags = 10;
+}
+
+message PduTelemetryAll {
+  bytes magic = 1;
+  uint32 protocol_major = 2;
+  uint32 protocol_minor = 3;
+  PduSupervisorMode mode = 4;
+  bool estop_active = 5;
+  bool pbit_passed = 6;
+  bool cbit_passed = 7;
+  uint32 pbit_failed = 8;
+  uint32 cbit_failed = 9;
+  uint32 uptime_ms = 10;
+  bool last_fault_valid = 11;
+  uint32 last_fault_code = 12;
+  PduRailId last_fault_rail = 13;
+  uint32 last_fault_sequence = 14;
+  uint32 last_fault_status_word = 15;
+  uint32 last_fault_diag_word = 16;
+  uint32 reset_count = 17;
+  uint32 last_fault_uptime_ms = 18;
+  uint32 last_fault_unix_time_s = 19;
+  uint32 reset_flags = 20;
+  uint32 fault_history_count = 21;
+  uint32 fault_history_capacity = 22;
+  uint32 fault_history_dropped = 23;
+  PduWinchTelemetry winch = 24;
+  repeated PduRailTelemetry rails = 25;
+  repeated PduFaultRecord fault_history = 26;
+}

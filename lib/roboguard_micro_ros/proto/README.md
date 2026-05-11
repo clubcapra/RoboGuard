@@ -3,6 +3,7 @@ This folder contains the protobuf schema and nanopb options for RoboGuard teleme
 Files:
 - `roboguard.proto` - protobuf definitions for `Telemetry` and `EstopCommand`.
 - `roboguard.options` - nanopb generation options (max_count, max_size).
+- The same `.proto` file also contains the PDU control and telemetry messages that mirror `pdu_i2c_api`.
 
 Generate nanopb sources with protoc + nanopb plugin. Example:
 
@@ -17,3 +18,4 @@ On Windows with PlatformIO environment you may need to provide full plugin path.
 Notes:
 - The field numbers in `roboguard.proto` match the constants used by the current encoder in `roboguard_micro_ros.cpp` so on-wire compatibility is preserved.
 - Adjust `roboguard.options` `max_size` / `max_count` if you change array sizes.
+- The PDU messages are schema-only for now; wiring them to the runtime I2C client can be added next if needed.

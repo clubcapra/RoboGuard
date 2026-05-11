@@ -6,12 +6,16 @@
  */
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <math.h>
 #include <string.h>
 
 #include "roboguard_micro_ros.h"
 #include "sensor_data.h"
+#include "pdu_i2c_api.h"
+#include "roboguard.pb.h"
 
 /** @defgroup BatteryConstants Battery Configuration Constants
  *  @brief Constants for battery monitoring and reporting
@@ -47,6 +51,9 @@
 #define FRAME_MAX_PAYLOAD 220
 #define FRAME_TYPE_TELEMETRY 0x01
 #define FRAME_TYPE_ESTOP_COMMAND 0x02
+#define FRAME_TYPE_PDU_INFO 0x03
+#define FRAME_TYPE_PDU_COMMAND 0x04
+#define FRAME_TYPE_PDU_COMMAND_RESULT 0x05
 /** @} */
 
 /** @defgroup MessageFields Telemetry Protobuf Field IDs
@@ -86,6 +93,8 @@ const int estop_pin = PA12;         /**< Emergency stop output pin */
 int alive = 0;                      /**< Communication status flag */
 HardwareSerial Serial3(USART3);     /**< Serial interface for Nanopb transport */
 static uint32_t last_publish_ms = 0;
+static bool pdu_info_published = false;
+static roboguard::pdu::Client pdu_client(Wire);
 /** @} */
 
 /**
@@ -108,22 +117,25 @@ static uint16_t rx_offset = 0;
 static uint8_t rx_checksum = 0;
 static uint8_t rx_payload[FRAME_MAX_PAYLOAD];
 
-static bool pb_write_key(pb_ostream_t *stream, uint32_t field_number, pb_wire_type_t wire_type) {
-    return pb_encode_tag(stream, wire_type, field_number);
-}
+struct FloatArrayEncodeContext {
+    const float *values;
+    size_t count;
+};
 
-static bool pb_write_float(pb_ostream_t *stream, uint32_t field_number, float value) {
-    uint32_t packed = 0;
-    memcpy(&packed, &value, sizeof(packed));
-    return pb_write_key(stream, field_number, PB_WT_32BIT) && pb_encode_fixed32(stream, &packed);
-}
+struct ByteArrayEncodeContext {
+    const uint8_t *values;
+    size_t count;
+};
 
-static bool pb_write_bool(pb_ostream_t *stream, uint32_t field_number, bool value) {
-    return pb_write_key(stream, field_number, PB_WT_VARINT) && pb_encode_varint(stream, value ? 1U : 0U);
-}
+struct PduInfoEncodeContext {
+    const uint8_t *magic;
+    size_t magic_size;
+};
 
-static bool pb_write_uint(pb_ostream_t *stream, uint32_t field_number, uint32_t value) {
-    return pb_write_key(stream, field_number, PB_WT_VARINT) && pb_encode_varint(stream, value);
+static bool send_frame(uint8_t type, const uint8_t *payload, uint16_t payload_length);
+
+static bool send_pb_frame(uint8_t type, const uint8_t *payload, uint16_t payload_length) {
+    return send_frame(type, payload, payload_length);
 }
 
 static uint8_t compute_checksum(uint8_t type, uint16_t length, const uint8_t *payload) {
@@ -136,60 +148,63 @@ static uint8_t compute_checksum(uint8_t type, uint16_t length, const uint8_t *pa
     return checksum;
 }
 
-static bool encode_telemetry_payload(uint8_t *buffer, size_t buffer_size, size_t *out_size) {
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
-    const float unknown_value = nan("1");
+static bool encode_float_array(pb_ostream_t *stream, const pb_field_iter_t *field, void *const *arg) {
+    const FloatArrayEncodeContext *ctx = static_cast<const FloatArrayEncodeContext *>(*arg);
+    for (size_t i = 0; i < ctx->count; ++i) {
+        uint32_t packed = 0;
+        memcpy(&packed, &ctx->values[i], sizeof(packed));
+        if (!pb_encode_tag_for_field(stream, field)) {
+            return false;
+        }
+        if (!pb_encode_fixed32(stream, &packed)) {
+            return false;
+        }
+    }
+    return true;
+}
 
-    if (!pb_write_float(&stream, FIELD_BATTERY_CAPACITY, sensor_data.battery_capacity)) {
+static bool encode_bytes_field(pb_ostream_t *stream, const pb_field_iter_t *field, void *const *arg) {
+    const ByteArrayEncodeContext *ctx = static_cast<const ByteArrayEncodeContext *>(*arg);
+    if (!pb_encode_tag_for_field(stream, field)) {
         return false;
     }
-    if (!pb_write_float(&stream, FIELD_BATTERY_DESIGN_CAPACITY, BATTERY_CAPACITY)) {
+    return pb_encode_string(stream, ctx->values, ctx->count);
+}
+
+static bool encode_pdu_info_magic(pb_ostream_t *stream, const pb_field_iter_t *field, void *const *arg) {
+    const PduInfoEncodeContext *ctx = static_cast<const PduInfoEncodeContext *>(*arg);
+    if (!pb_encode_tag_for_field(stream, field)) {
         return false;
     }
-    if (!pb_write_float(&stream, FIELD_BATTERY_CHARGE, unknown_value)) {
-        return false;
-    }
-    if (!pb_write_uint(&stream, FIELD_BATTERY_POWER_SUPPLY_TECHNOLOGY, 3U)) {
-        return false;
-    }
-    if (!pb_write_bool(&stream, FIELD_BATTERY_PRESENT, sensor_data.present)) {
-        return false;
-    }
-    if (!pb_write_uint(&stream, FIELD_BATTERY_POWER_SUPPLY_HEALTH, 0U)) {
-        return false;
-    }
-    for (uint8_t i = 0; i < N_BATTERY_CELLS; i++) {
-        if (!pb_write_float(&stream, FIELD_BATTERY_CELL_VOLTAGE, sensor_data.battery_cell_voltage[i])) {
-            return false;
-        }
-    }
-    for (uint8_t i = 0; i < N_THERMISTORS; i++) {
-        if (!pb_write_float(&stream, FIELD_BATTERY_CELL_TEMPERATURE, sensor_data.battery_temp[i])) {
-            return false;
-        }
-    }
-    if (!pb_write_float(&stream, FIELD_BATTERY_PERCENTAGE, unknown_value)) {
-        return false;
-    }
-    if (!pb_write_float(&stream, FIELD_BATTERY_VOLTAGE, sensor_data.battery_voltage)) {
-        return false;
-    }
-    if (!pb_write_float(&stream, FIELD_BATTERY_CURRENT, sensor_data.battery_current)) {
-        return false;
-    }
-    if (!pb_write_float(&stream, FIELD_BATTERY_TEMPERATURE, sensor_data.bms_temp)) {
-        return false;
-    }
-    if (!pb_write_bool(&stream, FIELD_ESTOP_BT, false)) {
-        return false;
-    }
-    if (!pb_write_bool(&stream, FIELD_ESTOP_STM32, sensor_data.estop_status_stm32)) {
-        return false;
-    }
-    if (!pb_write_float(&stream, FIELD_AMBIANT_TEMP, sensor_data.ambiant_temp)) {
-        return false;
-    }
-    if (!pb_write_float(&stream, FIELD_HUMIDITY, sensor_data.humidity)) {
+    return pb_encode_string(stream, ctx->magic, ctx->magic_size);
+}
+
+static bool encode_telemetry_payload(uint8_t *buffer, size_t buffer_size, size_t *out_size) {
+    roboguard_Telemetry message = {};
+    FloatArrayEncodeContext cell_voltage_context{sensor_data.battery_cell_voltage, N_BATTERY_CELLS};
+    FloatArrayEncodeContext cell_temp_context{sensor_data.battery_temp, N_THERMISTORS};
+
+    message.battery_capacity = sensor_data.battery_capacity;
+    message.battery_design_capacity = BATTERY_CAPACITY;
+    message.battery_charge = nanf("1");
+    message.battery_power_supply_technology = 3U;
+    message.battery_present = sensor_data.present;
+    message.battery_power_supply_health = 0U;
+    message.battery_cell_voltage.funcs.encode = encode_float_array;
+    message.battery_cell_voltage.arg = &cell_voltage_context;
+    message.battery_cell_temperature.funcs.encode = encode_float_array;
+    message.battery_cell_temperature.arg = &cell_temp_context;
+    message.battery_percentage = nanf("1");
+    message.battery_voltage = sensor_data.battery_voltage;
+    message.battery_current = sensor_data.battery_current;
+    message.battery_temperature = sensor_data.bms_temp;
+    message.estop_bt = false;
+    message.estop_stm32 = sensor_data.estop_status_stm32;
+    message.ambiant_temp = sensor_data.ambiant_temp;
+    message.humidity = sensor_data.humidity;
+
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
+    if (!pb_encode(&stream, roboguard_Telemetry_fields, &message)) {
         return false;
     }
 
@@ -197,32 +212,62 @@ static bool encode_telemetry_payload(uint8_t *buffer, size_t buffer_size, size_t
     return true;
 }
 
-/**
- * @brief Decode incoming estop command payload
- *
- * Expects protobuf payload with boolean field #1.
- */
 static bool decode_estop_command(const uint8_t *payload, size_t payload_size, bool *estop_pwr_out) {
+    roboguard_EstopCommand message = {};
     pb_istream_t stream = pb_istream_from_buffer(payload, payload_size);
-    bool eof = false;
-    bool has_estop_field = false;
-    pb_wire_type_t wire_type = PB_WT_VARINT;
-    uint32_t tag = 0;
+    if (!pb_decode(&stream, roboguard_EstopCommand_fields, &message)) {
+        return false;
+    }
+    *estop_pwr_out = message.estop_power_out;
+    return true;
+}
 
-    while (pb_decode_tag(&stream, &wire_type, &tag, &eof)) {
-        if (tag == CMD_FIELD_ESTOP_POWER_OUT && wire_type == PB_WT_VARINT) {
-            uint64_t value = 0;
-            if (!pb_decode_varint(&stream, &value)) {
-                return false;
-            }
-            *estop_pwr_out = value ? true : false;
-            has_estop_field = true;
-        } else if (!pb_skip_field(&stream, wire_type)) {
-            return false;
-        }
+static bool encode_pdu_info_payload(const roboguard::pdu::ApiInfo &info, uint8_t *buffer, size_t buffer_size,
+                                    size_t *out_size) {
+    roboguard_PduInfo message = {};
+    PduInfoEncodeContext magic_context{reinterpret_cast<const uint8_t *>(info.magic), sizeof(info.magic)};
+
+    message.magic.funcs.encode = encode_pdu_info_magic;
+    message.magic.arg = &magic_context;
+    message.protocol_major = info.protocol_major;
+    message.protocol_minor = info.protocol_minor;
+    message.fw_major = info.fw_major;
+    message.fw_minor = info.fw_minor;
+    message.fw_patch = info.fw_patch;
+    message.i2c_addr = info.i2c_addr;
+    message.rail_count = info.rail_count;
+
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
+    if (!pb_encode(&stream, roboguard_PduInfo_fields, &message)) {
+        return false;
     }
 
-    return eof && has_estop_field;
+    *out_size = stream.bytes_written;
+    return true;
+}
+
+static bool encode_pdu_command_result(const roboguard::pdu::ApiCommandResult &result, uint8_t *buffer,
+                                      size_t buffer_size, size_t *out_size) {
+    roboguard_PduCommandResult message = {};
+    message.sequence = result.sequence;
+    message.busy = result.busy != 0;
+    message.status = static_cast<roboguard_PduStatusCode>(result.status);
+    message.command = static_cast<roboguard_PduCommandCode>(result.command);
+    message.arg0 = result.arg0;
+    message.arg1 = result.arg1;
+
+    pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
+    if (!pb_encode(&stream, roboguard_PduCommandResult_fields, &message)) {
+        return false;
+    }
+
+    *out_size = stream.bytes_written;
+    return true;
+}
+
+static bool decode_pdu_command(const uint8_t *payload, size_t payload_size, roboguard_PduCommandFrame *command) {
+    pb_istream_t stream = pb_istream_from_buffer(payload, payload_size);
+    return pb_decode(&stream, roboguard_PduCommandFrame_fields, command);
 }
 
 static void handle_estop_command(const uint8_t *payload, size_t payload_size) {
@@ -235,6 +280,126 @@ static void handle_estop_command(const uint8_t *payload, size_t payload_size) {
     if (!request_estop_power) {
         digitalWrite(estop_pin, LOW);
     }
+}
+
+static bool publish_telemetry() {
+    uint8_t payload[FRAME_MAX_PAYLOAD];
+    size_t payload_size = 0;
+    if (!encode_telemetry_payload(payload, sizeof(payload), &payload_size)) {
+        return false;
+    }
+    return send_pb_frame(FRAME_TYPE_TELEMETRY, payload, (uint16_t)payload_size);
+}
+
+static bool publish_pdu_info_once() {
+    if (pdu_info_published) {
+        return true;
+    }
+
+    roboguard::pdu::ApiInfo info = {};
+    if (!pdu_client.readInfo(info)) {
+        return false;
+    }
+
+    uint8_t payload[FRAME_MAX_PAYLOAD];
+    size_t payload_size = 0;
+    if (!encode_pdu_info_payload(info, payload, sizeof(payload), &payload_size)) {
+        return false;
+    }
+
+    if (!send_pb_frame(FRAME_TYPE_PDU_INFO, payload, (uint16_t)payload_size)) {
+        return false;
+    }
+
+    pdu_info_published = true;
+    return true;
+}
+
+static bool dispatch_pdu_command(const roboguard_PduCommandFrame &command) {
+    using namespace roboguard::pdu;
+
+    bool ok = false;
+    switch (command.command) {
+        case roboguard_PduCommandCode_PDU_CMD_NOOP:
+            ok = pdu_client.noop();
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_RAIL_ENABLE:
+            ok = pdu_client.setRailEnable((uint8_t)command.arg0, command.arg1 != 0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_LED_DUTY:
+            ok = pdu_client.setLedDuty((uint8_t)command.arg0, (uint8_t)command.arg1);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_ALL_LEDS:
+            ok = pdu_client.setAllLeds((uint8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_LED_PATTERN:
+            ok = pdu_client.setLedPattern((uint8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_ESTOP_LOCAL:
+            ok = pdu_client.setEstopLocal(command.arg0 != 0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_ESTOP_VTX:
+            ok = pdu_client.setEstopVtx(command.arg0 != 0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_CLEAR_RAIL_LATCH:
+            ok = pdu_client.clearRailLatch((uint8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_CLEAR_FAULT_LOG:
+            ok = pdu_client.clearFaultLog();
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_RESET_DEVICE:
+            ok = pdu_client.resetDevice();
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_UNIX_TIME:
+            ok = pdu_client.setUnixTime((uint32_t)command.arg0 | ((uint32_t)command.arg1 << 8) |
+                                        ((uint32_t)command.arg2 << 16) | ((uint32_t)command.arg3 << 24));
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_REFRESH_HOTSWAP_BLACKBOX:
+            ok = pdu_client.refreshHotswapBlackBox((uint8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_ERASE_HOTSWAP_BLACKBOX:
+            ok = pdu_client.eraseHotswapBlackBox((uint8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_WINCH_MODE:
+            ok = pdu_client.setWinchMode((uint8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_WINCH_DC_MOTOR:
+            ok = pdu_client.setWinchDcMotor((uint8_t)command.arg0, (int8_t)command.arg1);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_WINCH_PARALLEL_DC:
+            ok = pdu_client.setWinchParallelDc((int8_t)command.arg0);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_WINCH_STEPPER_PHASES:
+            ok = pdu_client.setWinchStepperPhases((int8_t)command.arg0, (int8_t)command.arg1);
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_BRAKE_WINCH:
+            ok = pdu_client.brakeWinch();
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_CLEAR_WINCH_FAULT:
+            ok = pdu_client.clearWinchFault();
+            break;
+        case roboguard_PduCommandCode_PDU_CMD_SET_WINCH_LOCK:
+            ok = pdu_client.setWinchLock((uint8_t)command.arg0, command.arg1 != 0);
+            break;
+        default:
+            ok = false;
+            break;
+    }
+
+    if (!ok) {
+        return false;
+    }
+
+    roboguard::pdu::ApiCommandResult result = {};
+    if (pdu_client.waitForCommandResult(result)) {
+        uint8_t payload[FRAME_MAX_PAYLOAD];
+        size_t payload_size = 0;
+        if (encode_pdu_command_result(result, payload, sizeof(payload), &payload_size)) {
+            (void)send_pb_frame(FRAME_TYPE_PDU_COMMAND_RESULT, payload, (uint16_t)payload_size);
+        }
+    }
+
+    return true;
 }
 
 static void process_rx_byte(uint8_t byte_in) {
@@ -273,8 +438,15 @@ static void process_rx_byte(uint8_t byte_in) {
             }
             break;
         case PARSER_READ_CHECKSUM:
-            if (rx_checksum == byte_in && rx_type == FRAME_TYPE_ESTOP_COMMAND) {
-                handle_estop_command(rx_payload, rx_length);
+            if (rx_checksum == byte_in) {
+                if (rx_type == FRAME_TYPE_ESTOP_COMMAND) {
+                    handle_estop_command(rx_payload, rx_length);
+                } else if (rx_type == FRAME_TYPE_PDU_COMMAND) {
+                    roboguard_PduCommandFrame command = {};
+                    if (decode_pdu_command(rx_payload, rx_length, &command)) {
+                        (void)dispatch_pdu_command(command);
+                    }
+                }
             }
             parser_state = PARSER_WAIT_SYNC_A;
             break;
@@ -312,26 +484,21 @@ static bool send_frame(uint8_t type, const uint8_t *payload, uint16_t payload_le
     return written == expected_size;
 }
 
-static bool publish_telemetry() {
-    uint8_t payload[FRAME_MAX_PAYLOAD];
-    size_t payload_size = 0;
-    if (!encode_telemetry_payload(payload, sizeof(payload), &payload_size)) {
-        return false;
-    }
-    return send_frame(FRAME_TYPE_TELEMETRY, payload, (uint16_t)payload_size);
-}
-
 int setup_micro_ros(){
     // Configure serial transport
     Serial3.setRx(PC11);
     Serial3.setTx(PC10);
     Serial3.begin(SERIAL_BAUDRATE);
 
+    // Initialize PDU I2C client used by protobuf control/info messages.
+    (void)pdu_client.begin();
+
     parser_state = PARSER_WAIT_SYNC_A;
     rx_type = 0;
     rx_length = 0;
     rx_offset = 0;
     rx_checksum = 0;
+    pdu_info_published = false;
     last_publish_ms = millis();
 
     alive = 1;
@@ -350,6 +517,8 @@ int update_micro_ros(){
     }
 
     process_incoming_frames();
+
+    (void)publish_pdu_info_once();
 
     if ((uint32_t)(millis() - last_publish_ms) >= TIMER_TIMEOUT_MS) {
         if (!publish_telemetry()) {

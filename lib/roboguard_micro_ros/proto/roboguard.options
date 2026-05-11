@@ -13,3 +13,28 @@ Telemetry.battery_cell_temperature:
   max_count: 3
 
 # You can also tune individual field max sizes if required.
+
+# PDU schema limits
+PduInfo.magic:
+  max_size: 4
+
+PduPmbusBridgeRequest.data:
+  max_size: 24
+
+PduPmbusBridgeResult.data:
+  max_size: 24
+
+PduRailTelemetry.bb_ram:
+  max_size: 16
+
+PduRailTelemetry.bb_eeprom:
+  max_size: 16
+
+PduTelemetryAll.magic:
+  max_size: 4
+
+PduTelemetryAll.rails:
+  max_count: 3
+
+PduTelemetryAll.fault_history:
+  max_count: 24
