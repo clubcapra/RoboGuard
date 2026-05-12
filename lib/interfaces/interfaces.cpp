@@ -32,6 +32,7 @@ static const uint32_t kBmsBaud = 9600;
 #define FAULT_BATT_OVER_TEMP 6    /**< Battery overtemperature */
 #define FAULT_AMBIANT_OVERTEMP 7  /**< Ambient overtemperature */
 #define FAULT_AMBIANT_HUMIDITY 8  /**< Ambient humidity fault */
+#define FAULT_BMS_OVER_TEMP 9     /**< BMS overtemperature */
 /** @} */
 
 /** @defgroup SafetyLimits System Safety Limit Definitions
@@ -44,6 +45,8 @@ static const uint32_t kBmsBaud = 9600;
 #define BATT_CELL_MAX_V 4.2      /**< Maximum cell voltage (V) */
 #define BATT_MAX_TEMP 80         /**< Maximum battery temperature (°C) */
 #define BATT_MIN_TEMP 10         /**< Minimum battery temperature (°C) */
+#define BMS_MAX_TEMP 80         /**< Maximum battery temperature (°C) */
+#define BMS_MIN_TEMP 10         /**< Minimum battery temperature (°C) */
 #define BATT_CELL_MIN_V_BMS 3500 /**< Minimum cell voltage for BMS (mV) */
 #define BATT_CELL_MAX_V_BMS 4200 /**< Maximum cell voltage for BMS (mV) */
 
@@ -171,41 +174,52 @@ void update_interfaces()
 
 uint8_t check_estop()
 {
-    /*
-    // Check battery pack voltage limits
-    if (sensor_data.battery_voltage < BATT_MIN_V)
+    if(sensor_data.present)
     {
-        return (FAULT_BATT_UNDER_V);
-    }
-
-    if (sensor_data.battery_voltage > BATT_MAX_V)
-    {
-        return (FAULT_BATT_OVER_V);
-    }
-
-    // Check individual cell voltages
-    for (int i = 0; i < N_BATTERY_CELLS; i++)
-    {
-        if (sensor_data.battery_cell_voltage[i] < BATT_CELL_MIN_V)
+        // Check battery pack voltage limits
+        if (sensor_data.battery_voltage < BATT_MIN_V)
         {
-            return (FAULT_BATT_CELL_UNDER_V);
+            return (FAULT_BATT_UNDER_V);
         }
-    }
 
-    for (int i = 0; i < N_BATTERY_CELLS; i++)
-    {
-        if (sensor_data.battery_cell_voltage[i] > BATT_CELL_MAX_V)
+        if (sensor_data.battery_voltage > BATT_MAX_V)
         {
-            return (FAULT_BATT_CELL_OVER_V);
+            return (FAULT_BATT_OVER_V);
+        }
+
+        // Check individual cell voltages
+        for (int i = 0; i < N_BATTERY_CELLS; i++)
+        {
+            if (sensor_data.battery_cell_voltage[i] < BATT_CELL_MIN_V)
+            {
+                return (FAULT_BATT_CELL_UNDER_V);
+            }
+        }
+
+        for (int i = 0; i < N_BATTERY_CELLS; i++)
+        {
+            if (sensor_data.battery_cell_voltage[i] > BATT_CELL_MAX_V)
+            {
+                return (FAULT_BATT_CELL_OVER_V);
+            }
+        }
+        
+        // Check battery temperature
+        for (int i = 0; i < N_THERMISTORS; i++)
+        {
+            if (sensor_data.battery_temp[i] > BATT_MAX_TEMP)
+            {
+                return (FAULT_BATT_OVER_TEMP);
+            }
+        }
+        
+        if(sensor_data.bms_temp > BMS_MAX_TEMP)
+        {
+            return (FAULT_BMS_OVER_TEMP);
         }
     }
     
-    // Check battery temperature
-    if (sensor_data.battery_temp > BATT_MAX_TEMP)
-    {
-        return (FAULT_BATT_OVER_TEMP);
-    }
-    */
+    
     // Check environmental conditions
     if (sensor_data.ambiant_temp > AMBIANT_MAX_TEMP)
     {

@@ -31,7 +31,7 @@ bool Client::begin(uint32_t clock_hz) {
     softDelay();
     return true;
   }
-  wire_->begin();
+  wire_->begin(sda_pin_,scl_pin_);
   wire_->setClock(clock_hz);
   return true;
 }

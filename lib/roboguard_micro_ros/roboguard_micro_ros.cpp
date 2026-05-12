@@ -94,7 +94,7 @@ int alive = 0;                      /**< Communication status flag */
 HardwareSerial Serial3(USART3);     /**< Serial interface for Nanopb transport */
 static uint32_t last_publish_ms = 0;
 static bool pdu_info_published = false;
-static roboguard::pdu::Client pdu_client(Wire);
+static roboguard::pdu::Client pdu_client(PB10, PC12);
 /** @} */
 
 /**
@@ -281,6 +281,8 @@ static void handle_estop_command(const uint8_t *payload, size_t payload_size) {
         digitalWrite(estop_pin, LOW);
     }
 }
+
+
 
 static bool publish_telemetry() {
     uint8_t payload[FRAME_MAX_PAYLOAD];
