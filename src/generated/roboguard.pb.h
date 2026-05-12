@@ -133,6 +133,7 @@ typedef struct _roboguard_Telemetry {
     bool estop_stm32; /* FIELD_ESTOP_STM32 */
     float ambiant_temp; /* FIELD_AMBIANT_TEMP */
     float humidity; /* FIELD_HUMIDITY */
+    uint32_t estop_fault_code; /* Last estop fault code (0 = none) */
 } roboguard_Telemetry;
 
 /* Command message used to request emergency stop power changes. */
@@ -353,7 +354,7 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define roboguard_Telemetry_init_default         {0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0, 0}
+#define roboguard_Telemetry_init_default         {0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define roboguard_EstopCommand_init_default      {0}
 #define roboguard_PduInfo_init_default           {{{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0}
 #define roboguard_PduCommandFrame_init_default   {_roboguard_PduCommandCode_MIN, 0, 0, 0, 0}
@@ -364,7 +365,7 @@ extern "C" {
 #define roboguard_PduRailTelemetry_init_default  {_roboguard_PduRailId_MIN, _roboguard_PduRailState_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define roboguard_PduFaultRecord_init_default    {0, 0, _roboguard_PduRailId_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define roboguard_PduTelemetryAll_init_default   {{{NULL}, NULL}, 0, 0, _roboguard_PduSupervisorMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, _roboguard_PduRailId_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, roboguard_PduWinchTelemetry_init_default, {{NULL}, NULL}, {{NULL}, NULL}}
-#define roboguard_Telemetry_init_zero            {0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0, 0}
+#define roboguard_Telemetry_init_zero            {0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define roboguard_EstopCommand_init_zero         {0}
 #define roboguard_PduInfo_init_zero              {{{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0}
 #define roboguard_PduCommandFrame_init_zero      {_roboguard_PduCommandCode_MIN, 0, 0, 0, 0}
@@ -393,6 +394,7 @@ extern "C" {
 #define roboguard_Telemetry_estop_stm32_tag      14
 #define roboguard_Telemetry_ambiant_temp_tag     15
 #define roboguard_Telemetry_humidity_tag         16
+#define roboguard_Telemetry_estop_fault_code_tag 17
 #define roboguard_EstopCommand_estop_power_out_tag 1
 #define roboguard_PduInfo_magic_tag              1
 #define roboguard_PduInfo_protocol_major_tag     2
@@ -522,7 +524,8 @@ X(a, STATIC,   SINGULAR, FLOAT,    battery_temperature,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     estop_bt,         13) \
 X(a, STATIC,   SINGULAR, BOOL,     estop_stm32,      14) \
 X(a, STATIC,   SINGULAR, FLOAT,    ambiant_temp,     15) \
-X(a, STATIC,   SINGULAR, FLOAT,    humidity,         16)
+X(a, STATIC,   SINGULAR, FLOAT,    humidity,         16) \
+X(a, STATIC,   SINGULAR, UINT32,   estop_fault_code,  17)
 #define roboguard_Telemetry_CALLBACK pb_default_field_callback
 #define roboguard_Telemetry_DEFAULT NULL
 

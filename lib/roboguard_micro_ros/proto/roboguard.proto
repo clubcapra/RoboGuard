@@ -19,6 +19,7 @@ message Telemetry {
   bool estop_stm32 = 14;                       // FIELD_ESTOP_STM32
   float ambiant_temp = 15;                     // FIELD_AMBIANT_TEMP
   float humidity = 16;                         // FIELD_HUMIDITY
+  uint32 estop_fault_code = 17;                // Last estop fault code (0 = none)
 }
 
 // Command message used to request emergency stop power changes.

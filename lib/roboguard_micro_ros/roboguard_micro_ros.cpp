@@ -202,6 +202,7 @@ static bool encode_telemetry_payload(uint8_t *buffer, size_t buffer_size, size_t
     message.estop_stm32 = sensor_data.estop_status_stm32;
     message.ambiant_temp = sensor_data.ambiant_temp;
     message.humidity = sensor_data.humidity;
+    message.estop_fault_code = sensor_data.estop_fault_code;
 
     pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
     if (!pb_encode(&stream, roboguard_Telemetry_fields, &message)) {

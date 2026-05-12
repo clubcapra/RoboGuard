@@ -160,6 +160,7 @@ void update_interfaces()
 
     // Check for fault conditions
     uint8_t fault_code = check_estop();
+    sensor_data.estop_fault_code = fault_code;
 
     // Require a call to estop service to reset the fault
     if (fault_code)
