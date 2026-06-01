@@ -248,6 +248,8 @@ void setup() {
   Serial3.setRx(PC11);
   Serial3.setTx(PC10);
   Serial3.begin(115200);
+  pinMode(A12, OUTPUT);
+  digitalWrite(A12, 1);
   #endif
 }
 
